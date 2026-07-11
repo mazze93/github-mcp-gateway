@@ -1,31 +1,36 @@
 # github-mcp-gateway
 
-A remote MCP server that gives an MCP client (Cowork) authenticated access to
-GitHub — repos, issues, pull requests, file contents, and search — over a
-proper OAuth 2.1 handshake. Runs on Cloudflare Workers.
+A remote MCP server that gives MCP clients — Claude Code, Claude.ai/Cowork,
+or any spec-compliant client — authenticated access to GitHub: repos, issues,
+pull requests, file contents, and search, over a proper OAuth 2.1 handshake.
+Runs on Cloudflare Workers.
+
+**Status: deployed and live** at
+`https://github-mcp-gateway.mazzewhiteley93.workers.dev/mcp`.
 
 ## Why this exists, and the shape of it
 
-Cowork can't talk to GitHub's API directly with your credentials — it needs
-something in between that (a) proves who's asking, (b) holds a real GitHub
-token, and (c) translates tool calls into GitHub API requests. This Worker is
-that middle layer, and it plays **two OAuth roles at once**:
+An MCP client can't talk to GitHub's API directly with your credentials — it
+needs something in between that (a) proves who's asking, (b) holds a real
+GitHub token, and (c) translates tool calls into GitHub API requests. This
+Worker is that middle layer, and it plays **two OAuth roles at once**:
 
 - **OAuth client** to GitHub (upstream) — it sends you through GitHub's own
   consent screen and exchanges the resulting code for a token.
-- **OAuth server** to Cowork (downstream) — Cowork never sees your GitHub
-  token. It gets its own token from this Worker, scoped to this Worker only.
-  `@cloudflare/workers-oauth-provider` (Cloudflare's own library) implements
-  that downstream half: OAuth 2.1, PKCE, and Dynamic Client Registration
-  (DCR) — DCR specifically is what lets Cowork register itself as a client
-  on first connection without you manually creating credentials for it.
+- **OAuth server** to the MCP client (downstream) — the client never sees
+  your GitHub token. It gets its own token from this Worker, scoped to this
+  Worker only. `@cloudflare/workers-oauth-provider` (Cloudflare's own
+  library) implements that downstream half: OAuth 2.1, PKCE, and Dynamic
+  Client Registration (DCR) — DCR specifically is what lets a client
+  register itself on first connection without you manually creating
+  credentials for it.
 
 ```
-Cowork ──OAuth (DCR, PKCE)──▶ this Worker ──OAuth (GitHub App)──▶ GitHub
-                                    │
-                                    ▼
-                            Workers KV (OAUTH_KV)
-                        state · refresh tokens · approved clients
+MCP client ──OAuth (DCR, PKCE)──▶ this Worker ──OAuth (GitHub App)──▶ GitHub
+                                       │
+                                       ▼
+                               Workers KV (OAUTH_KV)
+                           state · refresh tokens · approved clients
 ```
 
 ### Why a GitHub App instead of a classic OAuth App
@@ -121,16 +126,19 @@ inferred from your repo namespaces, not verified.
 npx wrangler deploy
 ```
 
-## 5. Connect from Cowork
+## 5. Connect a client
 
-In Cowork, add a custom MCP connector pointing at:
+Point any MCP client at:
 
 ```
 https://github-mcp-gateway.<your-subdomain>.workers.dev/mcp
 ```
 
-Cowork will register itself via DCR, redirect you through this server's
-consent screen, then GitHub's, and land back in Cowork with tools available.
+- **Claude Code:** `claude mcp add --transport http github-mcp-gateway <url>`
+- **Claude.ai / Cowork:** add a custom MCP connector with that URL.
+
+The client registers itself via DCR, redirects you through this server's
+consent screen, then GitHub's, and lands back with tools available.
 
 ## Local development
 
@@ -169,15 +177,23 @@ quietly in the background, or it tells you exactly what to do.
 
 | Module | Tools |
 |---|---|
-| `src/tools/repos.ts` | `github_list_repos`, `github_get_repo`, `github_list_branches`, `github_list_commits`, `github_get_commit` |
+| `src/tools/repos.ts` | `github_list_repos`, `github_get_repo`, `github_list_branches`, `github_list_commits`, `github_get_commit`, `github_update_repo` |
 | `src/tools/issues.ts` | `github_list_issues`, `github_get_issue`, `github_create_issue`, `github_comment_on_issue`, `github_close_issue` |
 | `src/tools/pulls.ts` | `github_list_pull_requests`, `github_get_pull_request`, `github_list_pull_request_files`, `github_create_pull_request`, `github_merge_pull_request` |
 | `src/tools/contents.ts` | `github_get_file_contents`, `github_create_or_update_file`, `github_delete_file` |
 | `src/tools/search.ts` | `github_search_code`, `github_search_issues` |
 
+All list tools accept `per_page` and `page` for pagination.
+
 `github_merge_pull_request` and `github_delete_file` are the two
 destructive operations — irreversible via the tool itself once called.
-Cowork should confirm with you before invoking either.
+The client should confirm with you before invoking either.
+
+`github_update_repo` (description, homepage, topics) requires the GitHub
+App to have the **Administration** repository permission. The app as
+currently configured (Contents/Issues/PRs/Metadata) does not include it —
+add the permission in the App settings and re-approve the installation to
+enable this tool, or make those edits with the `gh` CLI instead.
 
 ## Security notes / known upstream issues this build accounts for
 
