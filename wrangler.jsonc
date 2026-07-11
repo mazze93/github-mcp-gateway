@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "github-mcp-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+
+  // Comma-separated GitHub logins permitted to use this server (checked at
+  // the OAuth callback). "mazze93" is inferred from repo namespaces seen
+  // elsewhere (mazze93/Secure-Pride, mazze93/projects-workspace,
+  // mazze93/meridian) — confirm this is actually your GitHub login before
+  // deploying, or the callback will 403 your own login attempt.
+  "vars": {
+    "ALLOWED_GITHUB_LOGINS": "mazze93"
+  },
+
+  // Workers KV — stores OAuth state (10 min TTL), approved-client cookies' backing
+  // data is in the cookie itself, and rotating GitHub refresh tokens (keyed by
+  // GitHub login, see src/github-client.ts). One namespace, prefixed keys.
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "0773ec3dd785418c984559f47d1623e9"
+    }
+  ],
+
+  // Durable Object — one instance per authenticated MCP session.
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "GitHubMcpAgent",
+        "name": "MCP_OBJECT"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GitHubMcpAgent"]
+    }
+  ]
+}

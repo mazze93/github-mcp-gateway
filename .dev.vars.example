@@ -1,0 +1,20 @@
+# Copy to .dev.vars for local `wrangler dev`. Never commit the real file.
+#
+# These come from the GitHub App you create at:
+# https://github.com/settings/apps/new (personal account)
+# or https://github.com/organizations/<org>/settings/apps/new (org-owned)
+#
+# Callback URL for local dev: http://localhost:8788/callback
+# Callback URL for production: https://github-mcp-gateway.<your-subdomain>.workers.dev/callback
+
+GITHUB_APP_CLIENT_ID=
+GITHUB_APP_CLIENT_SECRET=
+
+# 32+ random bytes. Generate with: openssl rand -hex 32
+COOKIE_ENCRYPTION_KEY=
+
+# Comma-separated GitHub logins allowed to use this server, e.g. "mazze93".
+# Defense-in-depth: even though only you can complete the GitHub OAuth
+# handshake for your own account, this gates tool exposure explicitly
+# rather than relying solely on "whoever can authenticate."
+ALLOWED_GITHUB_LOGINS=mazze93

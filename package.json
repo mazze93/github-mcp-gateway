@@ -1,0 +1,27 @@
+{
+  "name": "github-mcp-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remote MCP server exposing GitHub (repos, issues, PRs, contents, search) to MCP clients, authenticated via a GitHub App OAuth user-to-server flow. Deployed on Cloudflare Workers.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "tail": "wrangler tail",
+    "kv:create": "wrangler kv namespace create OAUTH_KV"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.2.2",
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "agents": "^0.5.0",
+    "hono": "^4.6.0",
+    "octokit": "^4.1.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260708.1",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}
