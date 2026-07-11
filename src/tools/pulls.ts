@@ -12,14 +12,16 @@ export function registerPullRequestTools(server: McpServer, env: Env, props: Pro
 			repo: z.string(),
 			state: z.enum(["open", "closed", "all"]).optional().describe("Defaults to 'open'."),
 			per_page: z.number().int().min(1).max(100).optional(),
+			page: z.number().int().min(1).optional(),
 		},
-		async ({ owner, repo, state, per_page }) =>
+		async ({ owner, repo, state, per_page, page }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.pulls.list({
 					owner,
 					repo,
 					state: state ?? "open",
 					per_page: per_page ?? 30,
+					page,
 				});
 				return data.map((pr) => ({
 					number: pr.number,

@@ -9,10 +9,8 @@
   },
 
   // Comma-separated GitHub logins permitted to use this server (checked at
-  // the OAuth callback). "mazze93" is inferred from repo namespaces seen
-  // elsewhere (mazze93/Secure-Pride, mazze93/projects-workspace,
-  // mazze93/meridian) — confirm this is actually your GitHub login before
-  // deploying, or the callback will 403 your own login attempt.
+  // the OAuth callback). Anyone else completing the GitHub consent screen
+  // gets a 403 at /callback.
   "vars": {
     "ALLOWED_GITHUB_LOGINS": "mazze93"
   },

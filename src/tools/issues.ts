@@ -13,8 +13,9 @@ export function registerIssueTools(server: McpServer, env: Env, props: Props): v
 			state: z.enum(["open", "closed", "all"]).optional().describe("Defaults to 'open'."),
 			labels: z.string().optional().describe("Comma-separated label names to filter by."),
 			per_page: z.number().int().min(1).max(100).optional(),
+			page: z.number().int().min(1).optional(),
 		},
-		async ({ owner, repo, state, labels, per_page }) =>
+		async ({ owner, repo, state, labels, per_page, page }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.issues.listForRepo({
 					owner,
@@ -22,6 +23,7 @@ export function registerIssueTools(server: McpServer, env: Env, props: Props): v
 					state: state ?? "open",
 					labels,
 					per_page: per_page ?? 30,
+					page,
 				});
 				return data
 					.filter((issue) => !issue.pull_request)
