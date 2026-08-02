@@ -22,7 +22,24 @@ const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
 
 app.get("/authorize", async (c) => {
-	const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
+	// parseAuthRequest throws on any invalid parameter (unknown client, bad
+	// redirect URI, disallowed PKCE method, ...). Those are client errors, not
+	// server faults — without this catch they escape as an unhandled exception
+	// and the caller sees an opaque 500 instead of the actual reason.
+	//
+	// RFC 6749 §4.1.2.1: when the client identity or redirect URI cannot be
+	// trusted, the error MUST be shown to the user agent rather than redirected
+	// back to the client. parseAuthRequest fails precisely in those cases, so
+	// returning 400 here is the correct behaviour.
+	let oauthReqInfo: AuthRequest;
+	try {
+		oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
+	} catch (error) {
+		if (error instanceof OAuthError) return error.toResponse();
+		const detail = error instanceof Error ? error.message : "Invalid authorization request";
+		return c.text(`invalid_request: ${detail}`, 400);
+	}
+
 	const { clientId } = oauthReqInfo;
 	if (!clientId) return c.text("Invalid request", 400);
 
