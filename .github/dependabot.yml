@@ -1,0 +1,41 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+    groups:
+      # Grouped so routine noise arrives as one PR — but restricted to
+      # minor+patch ON PURPOSE. Without update-types, a major (a real
+      # migration) rides into main inside a PR labelled like routine
+      # maintenance. Majors are deliberately NOT ignored: they should arrive,
+      # each as its own PR, so the migration is visible and reviewable.
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      production-dependencies:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+    groups:
+      # github/codeql-action/{init,analyze} share one repository and one SHA.
+      # Grouping them means they can only move as a set; a partial bump leaves
+      # init and analyze on different versions and breaks every later PR.
+      actions:
+        patterns:
+          - "*"
