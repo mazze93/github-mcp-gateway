@@ -23,5 +23,8 @@
     "@cloudflare/workers-types": "^5.20260708.1",
     "typescript": "^5.7.0",
     "wrangler": "^4.114.0"
+  },
+  "overrides": {
+    "@hono/node-server": "^2.0.12"
   }
 }
