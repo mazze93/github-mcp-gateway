@@ -1,0 +1,127 @@
+name: Deploy
+
+# Closes the gap that let production drift behind main: the Worker is deployed
+# by hand from a workstation, so a merged fix stayed unshipped until someone
+# remembered to run `wrangler deploy`. On 2026-08-03 the advisory fix in #5 sat
+# merged-but-not-deployed for ~14 hours for exactly that reason.
+#
+# This is a SEPARATE workflow from ci.yml on purpose. ci.yml runs on every pull
+# request, including from forks, and is deliberately credential-free — it builds
+# with `--dry-run` so it *cannot* publish. This workflow is the only place a
+# Cloudflare token exists, and it never runs on pull_request, so a fork PR can
+# never reach the secret.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: deploying needs to read the repo and nothing else.
+permissions:
+  contents: read
+
+# Never cancel a deploy in flight — an interrupted `wrangler deploy` leaves it
+# ambiguous which version is live. Queue instead, so the last merge wins.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Verify and deploy to Cloudflare
+    runs-on: ubuntu-latest
+
+    # Named environment so branch/reviewer protection rules and the deployment
+    # history are available from the repo settings without touching this file.
+    environment:
+      name: production
+      url: https://github-mcp-gateway.mazzewhiteley93.workers.dev
+
+    steps:
+      # Third-party actions are pinned to a full commit SHA, never a mutable
+      # tag — a tag can be repointed at arbitrary code after review.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      # The verification gate is repeated here rather than inherited from ci.yml.
+      # A green CI run proves some commit was sound; it does not prove THIS tree
+      # is. Re-running the checks in the same job that publishes means the exact
+      # artifact being deployed is the one that passed.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Audit production dependencies (must be zero)
+        run: npm audit --omit=dev --audit-level=low
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # wrangler is invoked directly rather than via a third-party deploy
+        # action: this step handles a credential, and the fewer external actions
+        # in reach of it, the smaller the supply-chain surface.
+        run: npx wrangler deploy
+
+      # A deploy that returns success can still have shipped a broken gateway.
+      # These are the same checks used to verify the OAuth fix by hand, so a
+      # regression in the authorization path fails the workflow instead of
+      # waiting to be discovered at the next login attempt.
+      - name: Smoke-test the live gateway
+        env:
+          BASE: https://github-mcp-gateway.mazzewhiteley93.workers.dev
+        run: |
+          set -euo pipefail
+          fail=0
+          Q="response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclaude-code-client-metadata&code_challenge=abc&code_challenge_method=S256&state=xyz"
+
+          check() { # name, want, got
+            if [ "$2" = "$3" ]; then
+              echo "PASS  $1 (got $3)"
+            else
+              echo "FAIL  $1 — wanted $2, got $3"
+              fail=1
+            fi
+          }
+
+          code() { curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 2 "$@"; }
+
+          # The regression this repo was fixed for: a loopback callback on
+          # localhost with an ephemeral port must reach the consent screen.
+          check "localhost:<port> callback" 200 \
+            "$(code "$BASE/authorize?$Q&redirect_uri=http%3A%2F%2Flocalhost%3A64341%2Fcallback")"
+
+          # An untrusted redirect must be refused as a client error, not a 500.
+          check "untrusted redirect rejected" 400 \
+            "$(code "$BASE/authorize?$Q&redirect_uri=https%3A%2F%2Fevil.example%2Fcb")"
+
+          # The MCP endpoint must never serve an unauthenticated caller.
+          check "/mcp gates unauthenticated" 401 \
+            "$(code -X POST "$BASE/mcp" -H 'Content-Type: application/json' -d '{}')"
+
+          # Dynamic client registration must stay open for MCP clients.
+          check "DCR /register" 201 \
+            "$(code -X POST "$BASE/register" -H 'Content-Type: application/json' \
+               -d '{"client_name":"ci-smoke","redirect_uris":["http://localhost:9/cb"],"token_endpoint_auth_method":"none"}')"
+
+          # CIMD support is gated on the global_fetch_strictly_public compat
+          # flag. If that flag is ever dropped this reports false and Claude
+          # Code — which authenticates with a URL client_id — breaks entirely.
+          # Parsed defensively: if discovery returns non-JSON or drops the key
+          # (a broken deploy, an error page), report that as a plain failed
+          # check rather than a stack trace that obscures the other results.
+          cimd="$(curl -sS --retry 3 --retry-delay 2 \
+            "$BASE/.well-known/oauth-authorization-server" \
+            | python3 -c 'import sys,json
+try:
+    print(json.load(sys.stdin).get("client_id_metadata_document_supported", "<key-absent>"))
+except Exception:
+    print("<not-json>")' || echo "<unreachable>")"
+          check "CIMD advertised" True "$cimd"
+
+          exit $fail
