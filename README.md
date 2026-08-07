@@ -8,6 +8,8 @@ Runs on Cloudflare Workers.
 **Status: deployed and live** at
 `https://github-mcp-gateway.mazzewhiteley93.workers.dev/mcp`.
 
+[![github-mcp-gateway MCP server](https://glama.ai/mcp/servers/mazze93/github-mcp-gateway/badges/card.svg)](https://glama.ai/mcp/servers/mazze93/github-mcp-gateway)
+
 ## Why this exists, and the shape of it
 
 An MCP client can't talk to GitHub's API directly with your credentials — it
