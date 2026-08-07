@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, build, audit
+    name: Typecheck, test, build, audit
     runs-on: ubuntu-latest
     steps:
       # Third-party actions are pinned to a full commit SHA, never a mutable
@@ -37,6 +37,13 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Runs against the real Workers runtime via @cloudflare/vitest-pool-workers
+      # (workerd, not a Node polyfill) -- covers the OAuth allowlist gate, CSRF
+      # and signed-cookie handling, loopback redirect normalisation, token
+      # refresh, and tool error wrapping. See test/*.test.ts.
+      - name: Test
+        run: npm test
+
       # The real build. Catches bundling/binding errors that tsc cannot see.
       # --dry-run builds and exits without touching the account, so this needs
       # no Cloudflare credentials and can never publish from CI.
@@ -44,13 +51,17 @@ jobs:
         run: npx wrangler deploy --dry-run --outdir dist
 
       # Gate PRODUCTION dependencies at zero. --omit=dev is deliberate, not a
-      # loophole: the only advisories currently outstanding come from
-      # undici <- miniflare <- wrangler, a devDependency that miniflare pins
-      # EXACTLY and that never enters the deployed artifact — the Worker runs
-      # on the Workers runtime, not miniflare. Gating on it would either wedge
-      # CI permanently or push someone to --force the build toolchain for no
-      # production benefit. Dev advisories are still reported below, unpinned
-      # to the exit code.
+      # loophole: dev-only advisories most often trace to
+      # undici <- miniflare <- wrangler, a devDependency chain that never
+      # enters the deployed artifact — the Worker runs on the Workers
+      # runtime, not miniflare. When miniflare pins a vulnerable undici
+      # directly (as it did until 2026-08-07), package.json's `overrides`
+      # forces the patched version instead of waiting on upstream; see the
+      # `undici` entry there. Gating production packages on that chain would
+      # otherwise either wedge CI whenever upstream lags a patch, or push
+      # someone to --force the whole build toolchain for no production
+      # benefit. Dev advisories are still reported below, unpinned to the
+      # exit code.
       - name: Audit production dependencies (must be zero)
         run: npm audit --omit=dev --audit-level=low
 
