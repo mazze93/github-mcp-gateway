@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
 import { Octokit } from "octokit";
+import { isLoginAllowed } from "./allowlist";
 import { fetchUpstreamAuthToken, getUpstreamAuthorizeUrl } from "./utils";
 import {
 	addApprovedClient,
@@ -151,8 +152,7 @@ app.get("/callback", async (c) => {
 	const octokit = new Octokit({ auth: token.accessToken });
 	const { data: user } = await octokit.rest.users.getAuthenticated();
 
-	const allowedLogins = c.env.ALLOWED_GITHUB_LOGINS.split(",").map((s) => s.trim().toLowerCase());
-	if (!allowedLogins.includes(user.login.toLowerCase())) {
+	if (!isLoginAllowed(user.login, c.env.ALLOWED_GITHUB_LOGINS)) {
 		return c.text(
 			`GitHub account "${user.login}" is not on this server's allowlist (ALLOWED_GITHUB_LOGINS). ` +
 				`If this is your account, update the worker var and redeploy.`,
