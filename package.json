@@ -12,9 +12,9 @@
     "kv:create": "wrangler kv namespace create OAUTH_KV"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.2.2",
-    "@modelcontextprotocol/sdk": "1.26.0",
-    "agents": "^0.5.0",
+    "@cloudflare/workers-oauth-provider": "^0.8.3",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "agents": "^0.20.1",
     "hono": "^4.6.0",
     "octokit": "^5.0.5",
     "zod": "^4.4.3"
