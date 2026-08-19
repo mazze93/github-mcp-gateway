@@ -9,7 +9,7 @@ export function registerSearchTools(server: McpServer, env: Env, props: Props): 
 		"Search code across repositories accessible to this token. Use GitHub search qualifiers " +
 			"(e.g. 'repo:owner/name', 'path:src', 'language:typescript') in the query.",
 		{
-			query: z.string().describe("GitHub code search query, e.g. 'useEffect repo:mazze93/meridian'."),
+			query: z.string().describe("GitHub code search query, e.g. 'useEffect repo:owner/name'."),
 			per_page: z.number().int().min(1).max(100).optional(),
 		},
 		async ({ query, per_page }) =>
@@ -31,7 +31,7 @@ export function registerSearchTools(server: McpServer, env: Env, props: Props): 
 		"Search issues and pull requests across repositories. Use GitHub search qualifiers " +
 			"(e.g. 'is:open', 'is:pr', 'author:username', 'repo:owner/name').",
 		{
-			query: z.string().describe("GitHub search query, e.g. 'is:open is:pr repo:mazze93/stele'."),
+			query: z.string().describe("GitHub search query, e.g. 'is:open is:pr repo:owner/name'."),
 			per_page: z.number().int().min(1).max(100).optional(),
 		},
 		async ({ query, per_page }) =>

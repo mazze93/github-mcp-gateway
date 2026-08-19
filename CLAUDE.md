@@ -129,9 +129,15 @@ afterwards — tool lists are only fetched at session start.
   are irreversible; always confirm with the user before invoking them.
 - **Code style** — tabs for indentation, double quotes, trailing commas.
 - **`global_fetch_strictly_public`** in `wrangler.jsonc`'s `compatibility_flags`
-  is required, not optional: workers-oauth-provider gates CIMD (Client ID
-  Metadata Document) support on it, and Claude Code authenticates with a URL
-  `client_id`. Remove it and `/authorize` throws for every such client.
+  is necessary but **not sufficient** for CIMD (Client ID Metadata Document).
+  workers-oauth-provider gates it on `!!options.clientIdMetadataDocumentEnabled
+  && hasGlobalFetchStrictlyPublic()`. The flag covers the second; `src/index.ts`
+  does not pass the first, so **CIMD is currently off** and the live discovery
+  document reports `client_id_metadata_document_supported: false` (verified
+  2026-08-19). Claude Code reaches the server through Dynamic Client
+  Registration instead, which is why nothing broke. Keep the flag — without it
+  CIMD is unreachable even once the option is set. To enable it, flip the
+  provider option and `deploy.yml`'s smoke-test expectation together.
 - **`overrides` in `package.json`** (`undici`, `@hono/node-server`) exist to hold
   CI's production audit gate at zero while upstream lags a patch. Don't drop them
   during a dependency bump — re-check `npm audit --omit=dev` first.

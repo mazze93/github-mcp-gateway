@@ -48,7 +48,7 @@ jobs:
     # history are available from the repo settings without touching this file.
     environment:
       name: production
-      url: https://github-mcp-gateway.mazzewhiteley93.workers.dev
+      url: ${{ vars.WORKER_BASE_URL || 'https://github-mcp-gateway.mazzewhiteley93.workers.dev' }}
 
     steps:
       # Third-party actions are pinned to a full commit SHA, never a mutable
@@ -88,7 +88,12 @@ jobs:
       # waiting to be discovered at the next login attempt.
       - name: Smoke-test the live gateway
         env:
-          BASE: https://github-mcp-gateway.mazzewhiteley93.workers.dev
+          # A fork must smoke-test ITS OWN deployment. Set the repository
+          # variable WORKER_BASE_URL (Settings > Secrets and variables >
+          # Actions > Variables) to your Worker's URL; without it this falls
+          # back to the upstream deployment, which would report a green deploy
+          # based on somebody else's live Worker.
+          BASE: ${{ vars.WORKER_BASE_URL || 'https://github-mcp-gateway.mazzewhiteley93.workers.dev' }}
         run: |
           set -euo pipefail
           fail=0
@@ -135,10 +140,30 @@ jobs:
           # ends the `run: |` block scalar and turns them into top-level YAML
           # keys. That made this entire workflow file invalid and every run
           # failed at startup with zero jobs -- see the comment at the top.
+          # NOTE: `// "<key-absent>"` would be WRONG here -- jq's alternative
+          # operator treats `false` as empty, so a genuine `false` would be
+          # misreported as a missing key. Ask has() explicitly.
           cimd="$(curl -sS --retry 3 --retry-delay 2 \
             "$BASE/.well-known/oauth-authorization-server" \
-            | jq -r '.client_id_metadata_document_supported // "<key-absent>"' \
+            | jq -r 'if has("client_id_metadata_document_supported")
+                     then .client_id_metadata_document_supported
+                     else "<key-absent>" end' \
             || echo "<not-json>")"
-          check "CIMD advertised" true "$cimd"
+          # Expected FALSE, deliberately. CIMD is gated on two conditions in
+          # workers-oauth-provider:
+          #
+          #   client_id_metadata_document_supported:
+          #     !!options.clientIdMetadataDocumentEnabled && hasGlobalFetchStrictlyPublic()
+          #
+          # wrangler.jsonc sets the compatibility flag, but src/index.ts does
+          # NOT pass `clientIdMetadataDocumentEnabled`, so CIMD is off. Claude
+          # Code reaches this server through Dynamic Client Registration
+          # instead (the "DCR /register" check above), which is why nothing
+          # visibly broke.
+          #
+          # This asserts the CURRENT state rather than an aspiration, so the
+          # check is honest. If CIMD is deliberately enabled later, flip the
+          # provider option and this expectation in the SAME commit.
+          check "CIMD state matches config" false "$cimd"
 
           exit $fail

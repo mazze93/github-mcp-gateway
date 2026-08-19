@@ -90,14 +90,24 @@ callback URL `http://localhost:8788/callback`, if you plan to iterate with
 
 ## 2. Create the KV namespace
 
+**Quickest path — `./scripts/setup.sh <your-github-login>`** installs
+dependencies, creates the namespace, and rewrites `wrangler.jsonc` with
+your namespace id and your allowlist. Then skip to step 3.
+
+By hand:
+
 ```bash
 cd github-mcp-gateway
-npm install
+npm ci
 npx wrangler kv namespace create OAUTH_KV
 ```
 
-Copy the returned `id` into `wrangler.jsonc`, replacing
-`REPLACE_WITH_KV_NAMESPACE_ID`.
+Copy the returned `id` into `wrangler.jsonc` under `kv_namespaces[0].id`,
+**replacing the committed value**. That value is the maintainer's live
+namespace, not a placeholder — this repository is a running deployment as
+well as a template, so the checked-in config is real. It is an identifier,
+not a credential: it grants a fork nothing, but leaving it in place means
+your Worker starts against a namespace your account cannot reach.
 
 ## 3. Set secrets and the allowlist var
 
@@ -112,15 +122,15 @@ openssl rand -hex 32 | npx wrangler secret put COOKIE_ENCRYPTION_KEY
 
 ```jsonc
 "vars": {
-  "ALLOWED_GITHUB_LOGINS": "mazze93"
+  "ALLOWED_GITHUB_LOGINS": "your-github-login"
 }
 ```
 
 This is a defense-in-depth allowlist checked at the OAuth callback: even
 though only you can complete the GitHub consent screen for your own account,
 this makes the gate explicit in code rather than implicit in "whoever can
-authenticate." **Confirm `mazze93` is actually your GitHub login** — it's
-inferred from your repo namespaces, not verified.
+authenticate." An unset or empty value denies everyone — it fails closed,
+so a missed step locks you out rather than opening the server up.
 
 ## 4. Deploy
 
@@ -196,6 +206,47 @@ App to have the **Administration** repository permission. The app as
 currently configured (Contents/Issues/PRs/Metadata) does not include it —
 add the permission in the App settings and re-approve the installation to
 enable this tool, or make those edits with the `gh` CLI instead.
+
+## Design limits (deliberate)
+
+Read this before adopting — these are decisions, not gaps.
+
+### One operator per deployment
+
+This server is **single-tenant by design**. `ALLOWED_GITHUB_LOGINS` gates
+the OAuth callback, and while it accepts a comma-separated list and token
+storage is already keyed per-login (`github:tokens:{login}`), the intended
+shape is one deployment per person.
+
+That is a threat-model decision. A shared deployment would mean one
+operator's KV namespace holding **other people's GitHub refresh tokens** —
+six-month credentials with repository write access. That makes the operator
+a credential custodian with a breach-notification obligation, on
+infrastructure with no such guarantees. Self-hosting keeps every credential
+in the account it belongs to, which is the whole point of the design.
+
+**So: fork it and run your own.** `./scripts/setup.sh` exists for exactly
+that. Setup is roughly ten minutes, and the Cloudflare free tier covers
+personal use.
+
+### Repository scope is set at install time, not by this server
+
+Because this is a GitHub *App* rather than a classic OAuth App, the repos
+reachable through it are the ones you select on GitHub's own installation
+screen. This server cannot widen that, and no tool call can reach outside
+it. To change scope, change the installation.
+
+### `github_update_repo` needs a permission the app does not ship with
+
+It requires the **Administration** repository permission. Add it in the App
+settings and re-approve the installation, or use the `gh` CLI for
+description and topic edits.
+
+### Not a hosted service
+
+There is no public instance to point a client at. The URL in this README is
+the maintainer's own deployment and its allowlist will reject you. This is
+source you run, not a service you sign up for.
 
 ## Security notes / known upstream issues this build accounts for
 
