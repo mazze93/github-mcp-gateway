@@ -93,12 +93,21 @@ jobs:
       # Dockerfile that fails at the worst possible moment.
       - name: Smoke-test the image entrypoint
         run: |
-          VERSION="$(docker run --rm github-mcp-gateway-toolchain:ci --version)"
+          # `wrangler --version` prints the bare version ("4.119.0") with no
+          # product name, so assert on the shape rather than on a substring.
+          VERSION="$(docker run --rm github-mcp-gateway-toolchain:ci --version | tr -d '\r')"
           echo "wrangler in image: ${VERSION}"
-          case "$VERSION" in
-            *wrangler*) ;;
-            *) echo "::error::Image entrypoint did not report a wrangler version"; exit 1 ;;
-          esac
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::Image entrypoint did not report a wrangler version (got: ${VERSION})"
+            exit 1
+          fi
+          # And it must be the version the lockfile pins, or the image is not
+          # the reproducible toolchain it claims to be.
+          EXPECTED="$(node -p "require('./node_modules/wrangler/package.json').version")"
+          if [ "$VERSION" != "$EXPECTED" ]; then
+            echo "::error::Image wrangler ${VERSION} != lockfile wrangler ${EXPECTED}"
+            exit 1
+          fi
 
       # A non-root final stage is a hardening claim; assert it rather than
       # trusting the Dockerfile to stay that way.
