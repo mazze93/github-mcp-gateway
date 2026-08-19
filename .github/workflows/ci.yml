@@ -34,6 +34,45 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
+      # ci.yml never parses the OTHER workflow files, which is how deploy.yml
+      # stayed structurally invalid from 2026-08-07 to 2026-08-19: an embedded
+      # multi-line `python3 -c` ended its `run: |` block scalar early and
+      # promoted `try:`/`except Exception:` to top-level YAML keys. GitHub
+      # rejected it at startup, so every run failed with ZERO jobs and no logs
+      # -- indistinguishable from noise, and nothing was deployed for 12 days.
+      #
+      # Plain PyYAML rather than a linter action: this handles no credential
+      # and needs no third party in reach of the repo to catch the failure
+      # mode that actually bit.
+      - name: Validate workflow files parse
+        run: |
+          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml
+          python3 - <<'PY'
+          import pathlib, sys, yaml
+          ALLOWED = {"name", "on", True, "permissions", "concurrency", "jobs",
+                     "env", "defaults", "run-name"}
+          failed = False
+          for path in sorted(pathlib.Path(".github/workflows").glob("*.yml")):
+              try:
+                  doc = yaml.safe_load(path.read_text())
+              except yaml.YAMLError as exc:
+                  print(f"::error file={path}::not valid YAML: {exc}")
+                  failed = True
+                  continue
+              stray = set(doc) - ALLOWED
+              if stray:
+                  # Almost always a block scalar that ended early -- shell or
+                  # python continuation lines dedented back to column 0.
+                  print(f"::error file={path}::stray top-level keys {sorted(map(str, stray))} "
+                        f"-- a `run: |` block probably ends early")
+                  failed = True
+              elif not doc.get("jobs"):
+                  print(f"::error file={path}::no jobs defined")
+                  failed = True
+              else:
+                  print(f"ok  {path}  jobs={list(doc['jobs'])}")
+          sys.exit(1 if failed else 0)
+          PY
       - name: Typecheck
         run: npm run typecheck
 

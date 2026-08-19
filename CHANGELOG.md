@@ -51,6 +51,17 @@ process, the license, and the security policy caught up with it.
 
 ### Fixed
 
+- **`deploy.yml` had never once run.** The workflow was structurally
+  invalid from the commit that added it (2026-08-07): its smoke test
+  embedded a multi-line `python3 -c '...'` whose continuation lines sat
+  at column 0, which ended the `run: |` block scalar and promoted
+  `try:` / `except Exception:` to top-level YAML keys. GitHub rejected
+  the file at startup, so all 30 runs reported failure with **zero jobs
+  and no logs** — which reads as noise rather than as a broken deploy.
+  The manual-drift problem that workflow exists to close therefore
+  stayed open, silently, for twelve days. The check now uses `jq`, and
+  CI validates that every workflow file parses with only legal
+  top-level keys, since `ci.yml` never previously parsed the others.
 - **`POST /authorize` never sent the approved-clients cookie.** Both
   cookies were collapsed through `Object.fromEntries(headers)`, which
   keeps only the last `Set-Cookie` and silently discards the rest, so
