@@ -21,7 +21,7 @@ export class ReauthorizationRequiredError extends Error {
 	}
 }
 
-async function getFreshAccessToken(env: Env, props: Props): Promise<string> {
+export async function getFreshAccessToken(env: Env, props: Props): Promise<string> {
 	const key = `github:tokens:${props.login}`;
 	const raw = await env.OAUTH_KV.get(key);
 

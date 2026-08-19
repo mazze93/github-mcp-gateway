@@ -20,13 +20,19 @@ via a GitHub App user-to-server OAuth flow.
 
 ```bash
 npm run typecheck   # tsc --noEmit — run before every deploy
+npm test            # vitest run, via @cloudflare/vitest-pool-workers (real workerd, not a Node polyfill)
 npm run dev         # wrangler dev at http://localhost:8788 (needs .dev.vars)
 npm run deploy      # wrangler deploy
 npm run tail        # live worker logs
 ```
 
-There are no tests; `typecheck` + a live tool call against the deployed worker
-is the verification bar.
+`test/*.test.ts` covers the OAuth allowlist gate, CSRF/state/signed-cookie
+handling, loopback redirect normalisation, token refresh, and tool
+error-wrapping — see `vitest.config.ts` for how bindings are sourced from
+`wrangler.jsonc`. CI runs it as a required gate. Not covered: the
+`GET`/`POST /authorize` route wiring, and a few timing/concurrency edges
+noted in PR #13's description. `typecheck` + `test` + a live tool call
+against the deployed worker is the verification bar.
 
 ## Architecture
 
