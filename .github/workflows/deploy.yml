@@ -95,8 +95,7 @@ jobs:
           # based on somebody else's live Worker.
           BASE: ${{ vars.WORKER_BASE_URL || 'https://github-mcp-gateway.mazzewhiteley93.workers.dev' }}
         run: |
-          set -euo pipefail
-          fail=0
+          set -uo pipefail
           Q="response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclaude-code-client-metadata&code_challenge=abc&code_challenge_method=S256&state=xyz"
 
           check() { # name, want, got
@@ -109,6 +108,20 @@ jobs:
           }
 
           code() { curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 2 "$@"; }
+
+          # `wrangler deploy` returns when the upload is ACCEPTED, not when the
+          # new version is serving everywhere -- propagation is eventually
+          # consistent. Checking immediately reads the previous version and
+          # reports a false failure, which is exactly what happened when CIMD
+          # was enabled: the smoke test said
+          # `client_id_metadata_document_supported: false` while curl against
+          # the same URL seconds later said true.
+          #
+          # So run the whole suite, and retry it as a unit. Passing on the
+          # first attempt is the normal case; the retries only cover the
+          # propagation window.
+          run_checks() {
+            fail=0
 
           # The regression this repo was fixed for: a loopback callback on
           # localhost with an ephemeral port must reach the consent screen.
@@ -161,4 +174,17 @@ jobs:
           # because a URL client_id stops resolving.
           check "CIMD advertised" true "$cimd"
 
-          exit $fail
+            return $fail
+          }
+
+          for attempt in 1 2 3 4 5; do
+            echo "--- smoke attempt ${attempt}/5 ---"
+            if run_checks; then
+              echo "All checks passed on attempt ${attempt}."
+              exit 0
+            fi
+            [ "$attempt" -lt 5 ] && { echo "Retrying in 15s (deploy may still be propagating)..."; sleep 15; }
+          done
+
+          echo "::error::Smoke test still failing after 5 attempts -- this is not a propagation delay."
+          exit 1
