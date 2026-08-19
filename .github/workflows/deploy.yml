@@ -149,21 +149,16 @@ jobs:
                      then .client_id_metadata_document_supported
                      else "<key-absent>" end' \
             || echo "<not-json>")"
-          # Expected FALSE, deliberately. CIMD is gated on two conditions in
+          # Expected TRUE. CIMD is gated on two conditions in
           # workers-oauth-provider:
           #
           #   client_id_metadata_document_supported:
           #     !!options.clientIdMetadataDocumentEnabled && hasGlobalFetchStrictlyPublic()
           #
-          # wrangler.jsonc sets the compatibility flag, but src/index.ts does
-          # NOT pass `clientIdMetadataDocumentEnabled`, so CIMD is off. Claude
-          # Code reaches this server through Dynamic Client Registration
-          # instead (the "DCR /register" check above), which is why nothing
-          # visibly broke.
-          #
-          # This asserts the CURRENT state rather than an aspiration, so the
-          # check is honest. If CIMD is deliberately enabled later, flip the
-          # provider option and this expectation in the SAME commit.
-          check "CIMD state matches config" false "$cimd"
+          # wrangler.jsonc supplies the compatibility flag and src/index.ts now
+          # supplies the option. If this reports false, ONE of the two was
+          # dropped -- and the visible symptom is the check above going 400,
+          # because a URL client_id stops resolving.
+          check "CIMD advertised" true "$cimd"
 
           exit $fail

@@ -10,18 +10,15 @@
   //   client_id_metadata_document_supported:
   //     !!options.clientIdMetadataDocumentEnabled && hasGlobalFetchStrictlyPublic()
   //
-  // This flag satisfies the second. src/index.ts does not pass the first, so
-  // CIMD is currently OFF and the live discovery document reports
-  // client_id_metadata_document_supported: false. Verified against the
-  // deployed Worker on 2026-08-19.
+  // This flag satisfies the second; src/index.ts supplies the first. Both are
+  // required — dropping either one does NOT merely stop advertising CIMD, it
+  // makes a URL client_id fall back to a bare KV lookup, so Claude Code
+  // resolves only while a stale `client:` record happens to survive in KV and
+  // returns "invalid_request: Invalid client_id" once it doesn't.
   //
-  // Nothing visibly broke because Claude Code falls back to Dynamic Client
-  // Registration (/register), which this server supports. Enabling CIMD is a
-  // deliberate change: flip the provider option and deploy.yml's smoke-test
-  // expectation in the same commit.
-  //
-  // Keep the flag regardless — removing it would make CIMD unreachable even
-  // once the provider option is set.
+  // That is not hypothetical: the flag sat here for months without the
+  // provider option, and deploy.yml's smoke test flipped 200 -> 400 across two
+  // deploys of identical code before it was found. Do not remove either half.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "observability": {
     "enabled": true
