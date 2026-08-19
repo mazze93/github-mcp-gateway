@@ -45,6 +45,23 @@ error-wrapping — see `vitest.config.ts` for how bindings are sourced from
 noted in PR #13's description. `typecheck` + `test` + a live tool call
 against the deployed worker is the verification bar.
 
+## Discovery metadata
+
+Three places, and they drift apart if only one is touched:
+
+- **Repo topics + description** — GitHub-side, not in the tree. Edit with
+  `gh repo edit --add-topic ...`. The GitHub App has no Administration
+  permission, so `github_update_repo` 403s here; `gh` is the path.
+- **`package.json`** — `keywords`, `repository`, `bugs`, `homepage`. The
+  package is `private: true` and unpublished, but registries and MCP
+  directories read this file from the repo.
+- **`README.md`** — the header block: one-sentence description, CI/release/
+  license badges, and the "What you get" table. The tool count there is a
+  claim about `src/tools/*.ts`; if you add a tool, update it (currently 21 —
+  `grep -c 'server.tool(' src/tools/*.ts`).
+
+`isTemplate` is set on the repo, which matches the fork-and-deploy model.
+
 ## Releasing
 
 Semantic versioning, tag-triggered. Cutting a release is one commit and
@@ -96,11 +113,17 @@ MCP client ──OAuth 2.1 (DCR, PKCE)──▶ Worker ──GitHub App OAuth─
 - `src/oauth/workers-oauth-utils.ts` — CSRF, one-time KV state, session-binding
   cookie, HMAC-signed approved-clients cookie. All cookies `__Host-` prefixed.
 - `src/oauth/loopback.ts` — rewrites `http://localhost:<port>` redirect URIs to
-  `127.0.0.1` on **both** `/authorize` and `/token`. Not cosmetic: workers-oauth-
-  provider's `isLoopbackUri()` doesn't recognise the hostname `localhost`, so
-  Claude Code's ephemeral-port callback fails exact-match against its registered
-  portless URI. Every published version through 0.8.3 behaves this way — don't
-  delete it after a dependency bump without re-testing a Claude Code connection.
+  `127.0.0.1` on **both** `/authorize` and `/token`. It was written because
+  workers-oauth-provider's `isLoopbackUri()` did not recognise the hostname
+  `localhost` through 0.8.3.
+  **That is no longer true.** 0.10.3 (in use since #21) added
+  `if (host.toLowerCase() === "localhost") return true;`, and matching is
+  hostname-strict (`reqUrl.hostname === regUrl.hostname`). So the shim is
+  redundant — and for a client registering *only* `localhost` it would now
+  *cause* the mismatch it was written to prevent. Claude Code is unaffected: its
+  metadata document registers both `http://localhost/callback` and
+  `http://127.0.0.1/callback`. Removing it is a live-OAuth change that needs a
+  real Claude Code reconnect to verify, so it stays until someone does that.
 - `src/oauth/allowlist.ts` — `isLoginAllowed()`, the pure predicate behind
   `ALLOWED_GITHUB_LOGINS`; `src/oauth/utils.ts` — GitHub App authorize-URL and
   token/refresh exchange (App flow, so `scope` is ignored upstream; repo access

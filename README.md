@@ -1,12 +1,40 @@
 # github-mcp-gateway
 
-A remote MCP server that gives MCP clients — Claude Code, Claude.ai/Cowork,
-or any spec-compliant client — authenticated access to GitHub: repos, issues,
-pull requests, file contents, and search, over a proper OAuth 2.1 handshake.
-Runs on Cloudflare Workers.
+**A remote MCP server that gives any MCP client authenticated GitHub access —
+repos, issues, pull requests, file contents, and search — over a real OAuth 2.1
+handshake, on Cloudflare Workers.**
 
-**Status: deployed and live** at
-`https://github-mcp-gateway.mazzewhiteley93.workers.dev/mcp`.
+[![CI](https://github.com/mazze93/github-mcp-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/mazze93/github-mcp-gateway/actions/workflows/ci.yml)
+[![Deploy](https://github.com/mazze93/github-mcp-gateway/actions/workflows/deploy.yml/badge.svg)](https://github.com/mazze93/github-mcp-gateway/actions/workflows/deploy.yml)
+[![CodeQL](https://github.com/mazze93/github-mcp-gateway/actions/workflows/codeql.yml/badge.svg)](https://github.com/mazze93/github-mcp-gateway/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/mazze93/github-mcp-gateway?sort=semver)](https://github.com/mazze93/github-mcp-gateway/releases)
+[![License](https://img.shields.io/github/license/mazze93/github-mcp-gateway)](./LICENSE)
+
+Works with **Claude Code**, **Claude.ai / Cowork**, and any spec-compliant MCP
+client. Authentication is a GitHub **App** user-to-server flow, so the repos it
+can reach are the ones you tick on GitHub's own installation screen — not
+everything your account can see.
+
+> **This is source you run, not a service you sign up for.** There is no shared
+> instance. You deploy your own Worker against your own GitHub App, and your
+> credentials never leave your account — see
+> [Design limits](#design-limits-deliberate). Setup is one script and about ten
+> minutes:
+>
+> ```bash
+> git clone https://github.com/mazze93/github-mcp-gateway
+> cd github-mcp-gateway && ./scripts/setup.sh <your-github-login>
+> ```
+
+## What you get
+
+| | |
+|---|---|
+| **21 tools** | repos (6), issues (5), pull requests (5), file contents (3), code and issue search (2) — every list tool paginated |
+| **Real OAuth 2.1** | PKCE, Dynamic Client Registration, and Client ID Metadata Documents, via Cloudflare's own `workers-oauth-provider` |
+| **Tokens that renew themselves** | 8-hour GitHub access tokens refreshed transparently against a 6-month refresh token; the MCP client never sees either |
+| **A hardened release** | multi-arch toolchain image, non-root and distroless, signed keyless with cosign, published with SBOM and SLSA provenance |
+| **Tested against the real runtime** | 66 tests on `workerd` via `@cloudflare/vitest-pool-workers`, not a Node polyfill, plus a post-deploy smoke test against the live gateway |
 
 [![github-mcp-gateway MCP server](https://glama.ai/mcp/servers/mazze93/github-mcp-gateway/badges/card.svg)](https://glama.ai/mcp/servers/mazze93/github-mcp-gateway)
 
@@ -244,9 +272,10 @@ description and topic edits.
 
 ### Not a hosted service
 
-There is no public instance to point a client at. The URL in this README is
-the maintainer's own deployment and its allowlist will reject you. This is
-source you run, not a service you sign up for.
+There is no public instance to point a client at. Any workers.dev URL you
+find referenced in this repository (in `deploy.yml`, `SECURITY.md`, or the
+`Dockerfile` header) is the maintainer's own deployment, and its allowlist
+will reject you. This is source you run, not a service you sign up for.
 
 ## Security notes / known upstream issues this build accounts for
 
