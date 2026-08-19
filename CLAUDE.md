@@ -127,6 +127,14 @@ afterwards — tool lists are only fetched at session start.
 
 - **Destructive tools** — `github_merge_pull_request` and `github_delete_file`
   are irreversible; always confirm with the user before invoking them.
+- **`McpAgent` is feature-frozen upstream.** As of `agents` 0.21.0 its type
+  carries `@deprecated McpAgent is feature-frozen. Migrate to an SDK v2 factory
+  with createMcpHandler from agents/mcp/server.` Frozen is not removed —
+  `serve`/`serveSSE` still work and nothing breaks — but new capability lands on
+  `createMcpHandler`, not here. Migration is deliberately deferred: the Durable
+  Object is sessionful on purpose (per-session tool registration in `init()`),
+  and the deprecation text names that as the case warranting a stateless route
+  running *beside* the existing one until sessions drain, not a swap.
 - **Code style** — tabs for indentation, double quotes, trailing commas.
 - **CIMD needs two things, not one.** workers-oauth-provider gates it on
   `!!options.clientIdMetadataDocumentEnabled && hasGlobalFetchStrictlyPublic()`
