@@ -47,7 +47,7 @@ app.get("/authorize", async (c) => {
 	if (await isClientApproved(c.req.raw, clientId, env.COOKIE_ENCRYPTION_KEY)) {
 		const { stateToken } = await createOAuthState(oauthReqInfo, c.env.OAUTH_KV);
 		const { setCookie } = await bindStateToSession(stateToken);
-		return redirectToGitHub(c.req.raw, stateToken, { "Set-Cookie": setCookie });
+		return redirectToGitHub(c.req.raw, stateToken, [setCookie]);
 	}
 
 	const { token: csrfToken, setCookie } = generateCSRFProtection();
@@ -93,11 +93,10 @@ app.post("/authorize", async (c) => {
 		const { stateToken } = await createOAuthState(state.oauthReqInfo, c.env.OAUTH_KV);
 		const { setCookie: sessionBindingCookie } = await bindStateToSession(stateToken);
 
-		const headers = new Headers();
-		headers.append("Set-Cookie", approvedClientCookie);
-		headers.append("Set-Cookie", sessionBindingCookie);
-
-		return redirectToGitHub(c.req.raw, stateToken, Object.fromEntries(headers));
+		return redirectToGitHub(c.req.raw, stateToken, [
+			approvedClientCookie,
+			sessionBindingCookie,
+		]);
 	} catch (error) {
 		if (error instanceof OAuthError) return error.toResponse();
 		console.error("POST /authorize error:", error);
@@ -105,19 +104,25 @@ app.post("/authorize", async (c) => {
 	}
 });
 
-function redirectToGitHub(request: Request, stateToken: string, headers: Record<string, string> = {}) {
-	return new Response(null, {
-		status: 302,
-		headers: {
-			...headers,
-			location: getUpstreamAuthorizeUrl({
-				upstream_url: GITHUB_AUTHORIZE_URL,
-				client_id: env.GITHUB_APP_CLIENT_ID,
-				redirect_uri: new URL("/callback", request.url).href,
-				state: stateToken,
-			}),
-		},
+/**
+ * Takes cookies as a LIST, not as a header object. A `Headers` instance can
+ * hold several Set-Cookie values, but collapsing one into a plain object --
+ * `Object.fromEntries(headers)` -- keeps only the LAST and silently discards
+ * the rest. POST /authorize sets two (approved-clients + session binding), so
+ * doing that dropped the approved-clients cookie on every consent and the
+ * "remember this client" path never took effect.
+ */
+function redirectToGitHub(request: Request, stateToken: string, cookies: string[] = []) {
+	const headers = new Headers({
+		location: getUpstreamAuthorizeUrl({
+			upstream_url: GITHUB_AUTHORIZE_URL,
+			client_id: env.GITHUB_APP_CLIENT_ID,
+			redirect_uri: new URL("/callback", request.url).href,
+			state: stateToken,
+		}),
 	});
+	for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+	return new Response(null, { status: 302, headers });
 }
 
 /**

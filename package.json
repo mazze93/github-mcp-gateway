@@ -2,6 +2,7 @@
   "name": "github-mcp-gateway",
   "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Remote MCP server exposing GitHub (repos, issues, PRs, contents, search) to MCP clients, authenticated via a GitHub App OAuth user-to-server flow. Deployed on Cloudflare Workers.",
   "type": "module",
   "scripts": {
