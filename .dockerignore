@@ -1,0 +1,23 @@
+# Everything the toolchain image must never see. .dev.vars in particular holds
+# real GitHub App credentials -- it is gitignored, and it stays out of the
+# build context too so it can never land in a layer.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+.git
+.github
+.wrangler
+node_modules
+dist
+coverage
+test
+.DS_Store
+*.log
+
+# Docs and local editor state have no bearing on the build.
+*.md
+!README.md
+.vscode
+.claude
+.remember

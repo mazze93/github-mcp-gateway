@@ -45,6 +45,38 @@ error-wrapping — see `vitest.config.ts` for how bindings are sourced from
 noted in PR #13's description. `typecheck` + `test` + a live tool call
 against the deployed worker is the verification bar.
 
+## Releasing
+
+Semantic versioning, tag-triggered. Cutting a release is one commit and
+one tag:
+
+```bash
+# 1. Bump VERSION and package.json to the SAME number, update CHANGELOG.md,
+#    and land it through a PR (main is protected).
+# 2. Then, on main:
+git tag -s v1.2.3 -m "v1.2.3"
+git push origin v1.2.3
+```
+
+`release.yml` verifies the tag agrees with `VERSION` **and**
+`package.json` before publishing anything, re-runs the full gate
+(typecheck, tests, production audit) because a tag can point at a commit
+that never went through a PR, then builds and pushes the multi-arch
+toolchain image, signs it keyless with cosign, and opens the GitHub
+Release.
+
+**A tag does not deploy the Worker.** `deploy.yml` does that, on merge to
+`main`. The version number describes the gateway's own contract — its
+tool surface, tool result shapes, and OAuth behaviour — not the image.
+
+**The image is a toolchain, not a server.** `ghcr.io/mazze93/github-mcp-gateway-toolchain`
+carries a pinned, non-root wrangler that *builds and deploys* the Worker.
+It cannot run the gateway: no Workers runtime, no Durable Object
+namespace, no KV binding exists in a container. Anyone wanting a running
+gateway wants the deployed Worker. CI builds this image on every PR
+(without pushing) and asserts the entrypoint works and the final stage is
+non-root, so the Dockerfile is exercised before release time.
+
 ## Architecture
 
 ```
