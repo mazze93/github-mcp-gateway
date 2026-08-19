@@ -40,8 +40,13 @@ updates:
         patterns:
           - "*"
 
-  # The toolchain image's bases (node:22-bookworm-slim, distroless
-  # nodejs22-debian12). Without this, the npm tree gets patched weekly while
+  # The toolchain image's bases (node:24-bookworm-slim, distroless
+  # nodejs24-debian12). Note these must move TOGETHER and in step with
+  # node-version in ci.yml/deploy.yml/release.yml -- Dependabot only sees the
+  # Dockerfile, so it will propose a build-stage bump on its own. A major it
+  # proposes is only mergeable if distroless publishes a matching runtime;
+  # nodejs26-debian12 did not exist when node:26 was offered (see the closed
+  # #28). Without this ecosystem the npm tree gets patched weekly while
   # the base image the release is built on quietly rots — and the base is the
   # part carrying the OS-level CVEs that `npm audit` cannot see.
   - package-ecosystem: docker

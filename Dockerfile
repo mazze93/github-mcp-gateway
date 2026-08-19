@@ -28,7 +28,7 @@
 
 # Pinned by digest, not just tag: a tag can be repointed at arbitrary content
 # after review, which is the same reasoning that pins the SHAs in ci.yml.
-FROM node:22-bookworm-slim AS build
+FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -54,7 +54,7 @@ RUN npx tsc --noEmit \
 # ----------------------------------------------------------------------------
 # Final stage: no shell, no npm, no compilers.
 # ----------------------------------------------------------------------------
-FROM gcr.io/distroless/nodejs22-debian12:nonroot
+FROM gcr.io/distroless/nodejs24-debian12:nonroot
 
 WORKDIR /app
 
