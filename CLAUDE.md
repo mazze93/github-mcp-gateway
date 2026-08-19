@@ -19,12 +19,23 @@ via a GitHub App user-to-server OAuth flow.
 ## Commands
 
 ```bash
-npm run typecheck   # tsc --noEmit — run before every deploy
+npm run typecheck   # tsc --noEmit
 npm test            # vitest run, via @cloudflare/vitest-pool-workers (real workerd, not a Node polyfill)
+npm test test/loopback.test.ts   # one file
+npm test -- -t "localhost"       # one test by name
 npm run dev         # wrangler dev at http://localhost:8788 (needs .dev.vars)
-npm run deploy      # wrangler deploy
 npm run tail        # live worker logs
+
+npx wrangler deploy --dry-run --outdir dist   # local build check; catches
+                    # bundling/binding errors tsc cannot see. Never publishes.
 ```
+
+**Deployment is automatic.** `.github/workflows/deploy.yml` typechecks, tests,
+and deploys on every push to `main` — it is the only place a Cloudflare token
+exists (`ci.yml` runs on PRs including forks and is deliberately
+credential-free). `npm run deploy` is a manual fallback, not the normal path;
+production drifting behind `main` because someone forgot to run it by hand is
+the exact failure that workflow was added to close.
 
 `test/*.test.ts` covers the OAuth allowlist gate, CSRF/state/signed-cookie
 handling, loopback redirect normalisation, token refresh, and tool
@@ -52,6 +63,16 @@ MCP client ──OAuth 2.1 (DCR, PKCE)──▶ Worker ──GitHub App OAuth─
   (allowlist gate + token persistence).
 - `src/oauth/workers-oauth-utils.ts` — CSRF, one-time KV state, session-binding
   cookie, HMAC-signed approved-clients cookie. All cookies `__Host-` prefixed.
+- `src/oauth/loopback.ts` — rewrites `http://localhost:<port>` redirect URIs to
+  `127.0.0.1` on **both** `/authorize` and `/token`. Not cosmetic: workers-oauth-
+  provider's `isLoopbackUri()` doesn't recognise the hostname `localhost`, so
+  Claude Code's ephemeral-port callback fails exact-match against its registered
+  portless URI. Every published version through 0.8.3 behaves this way — don't
+  delete it after a dependency bump without re-testing a Claude Code connection.
+- `src/oauth/allowlist.ts` — `isLoginAllowed()`, the pure predicate behind
+  `ALLOWED_GITHUB_LOGINS`; `src/oauth/utils.ts` — GitHub App authorize-URL and
+  token/refresh exchange (App flow, so `scope` is ignored upstream; repo access
+  is scoped at install time).
 - `src/github-client.ts` — token refresh. GitHub access tokens live 8h; refresh
   tokens 6 months. `getFreshAccessToken()` refreshes 5 min before expiry and
   persists the rotated pair to KV. `props.accessToken` is a **bootstrap value
@@ -66,14 +87,22 @@ MCP client ──OAuth 2.1 (DCR, PKCE)──▶ Worker ──GitHub App OAuth─
 Add it to the matching `src/tools/*.ts` module (or a new module registered in
 `github-mcp-agent.ts`). Pattern: `server.tool(name, description, zodShape,
 handler)` with the handler wrapped in `withOctokit(env, props, ...)`. Return
-plain serializable objects — `ok()` JSON-stringifies them. Then typecheck,
-deploy, and reconnect the MCP client (tool lists are fetched at session start).
+plain serializable objects — `ok()` JSON-stringifies them. Then typecheck, test,
+dry-run build, and merge to `main` (which deploys). Reconnect the MCP client
+afterwards — tool lists are only fetched at session start.
 
 ## Constraints
 
 - **Destructive tools** — `github_merge_pull_request` and `github_delete_file`
   are irreversible; always confirm with the user before invoking them.
 - **Code style** — tabs for indentation, double quotes, trailing commas.
+- **`global_fetch_strictly_public`** in `wrangler.jsonc`'s `compatibility_flags`
+  is required, not optional: workers-oauth-provider gates CIMD (Client ID
+  Metadata Document) support on it, and Claude Code authenticates with a URL
+  `client_id`. Remove it and `/authorize` throws for every such client.
+- **`overrides` in `package.json`** (`undici`, `@hono/node-server`) exist to hold
+  CI's production audit gate at zero while upstream lags a patch. Don't drop them
+  during a dependency bump — re-check `npm audit --omit=dev` first.
 - **Never commit** `.dev.vars` or real credentials. `.dev.vars.example` is the
   template.
 - The `Props` type is fixed at OAuth-grant time and does not update on token
