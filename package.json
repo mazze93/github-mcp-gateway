@@ -3,8 +3,31 @@
   "version": "1.0.0",
   "private": true,
   "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "remote-mcp-server",
+    "cloudflare-workers",
+    "durable-objects",
+    "github-app",
+    "oauth2",
+    "oauth21",
+    "pkce",
+    "claude",
+    "claude-code",
+    "typescript"
+  ],
   "description": "Remote MCP server exposing GitHub (repos, issues, PRs, contents, search) to MCP clients, authenticated via a GitHub App OAuth user-to-server flow. Deployed on Cloudflare Workers.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mazze93/github-mcp-gateway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mazze93/github-mcp-gateway/issues"
+  },
+  "homepage": "https://github.com/mazze93/github-mcp-gateway#readme",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
