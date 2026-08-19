@@ -128,16 +128,15 @@ afterwards — tool lists are only fetched at session start.
 - **Destructive tools** — `github_merge_pull_request` and `github_delete_file`
   are irreversible; always confirm with the user before invoking them.
 - **Code style** — tabs for indentation, double quotes, trailing commas.
-- **`global_fetch_strictly_public`** in `wrangler.jsonc`'s `compatibility_flags`
-  is necessary but **not sufficient** for CIMD (Client ID Metadata Document).
-  workers-oauth-provider gates it on `!!options.clientIdMetadataDocumentEnabled
-  && hasGlobalFetchStrictlyPublic()`. The flag covers the second; `src/index.ts`
-  does not pass the first, so **CIMD is currently off** and the live discovery
-  document reports `client_id_metadata_document_supported: false` (verified
-  2026-08-19). Claude Code reaches the server through Dynamic Client
-  Registration instead, which is why nothing broke. Keep the flag — without it
-  CIMD is unreachable even once the option is set. To enable it, flip the
-  provider option and `deploy.yml`'s smoke-test expectation together.
+- **CIMD needs two things, not one.** workers-oauth-provider gates it on
+  `!!options.clientIdMetadataDocumentEnabled && hasGlobalFetchStrictlyPublic()`
+  — the `global_fetch_strictly_public` compatibility flag in `wrangler.jsonc`
+  **and** `clientIdMetadataDocumentEnabled: true` in `src/index.ts`. Drop
+  either and a URL `client_id` stops being fetched as a metadata document and
+  silently degrades to a bare `OAUTH_KV.get("client:<url>")`, so Claude Code
+  authenticates only while a stale record survives in KV. The flag sat here
+  for months without the option and `deploy.yml`'s smoke test flipped 200 →
+  400 across two deploys of identical code before anyone noticed.
 - **`overrides` in `package.json`** (`undici`, `@hono/node-server`) exist to hold
   CI's production audit gate at zero while upstream lags a patch. Don't drop them
   during a dependency bump — re-check `npm audit --omit=dev` first.
