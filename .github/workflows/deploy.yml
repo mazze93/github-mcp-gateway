@@ -5,6 +5,20 @@ name: Deploy
 # remembered to run `wrangler deploy`. On 2026-08-03 the advisory fix in #5 sat
 # merged-but-not-deployed for ~14 hours for exactly that reason.
 #
+# HISTORY: this file was structurally invalid from the commit that added it
+# (2026-08-07) until 2026-08-19. The smoke test embedded a multi-line
+# `python3 -c '...'` whose continuation lines sat at column 0, ending the
+# `run: |` block scalar and promoting `try:` / `except Exception:` to
+# top-level YAML keys. GitHub rejected the workflow at startup, so all 30
+# runs "failed" with zero jobs and NOTHING was ever deployed by CI -- the
+# exact manual-drift problem this workflow exists to close stayed open the
+# whole time, silently. A workflow that fails at startup produces no job
+# logs, which is why it read as noise rather than as a broken deploy.
+#
+# ci.yml does not catch this: it never parses deploy.yml. If this file is
+# edited again, confirm the run actually produced jobs -- a red X with zero
+# jobs is a different failure from a red X with a failed step.
+
 # This is a SEPARATE workflow from ci.yml on purpose. ci.yml runs on every pull
 # request, including from forks, and is deliberately credential-free — it builds
 # with `--dry-run` so it *cannot* publish. This workflow is the only place a
@@ -112,16 +126,19 @@ jobs:
           # CIMD support is gated on the global_fetch_strictly_public compat
           # flag. If that flag is ever dropped this reports false and Claude
           # Code — which authenticates with a URL client_id — breaks entirely.
-          # Parsed defensively: if discovery returns non-JSON or drops the key
-          # (a broken deploy, an error page), report that as a plain failed
-          # check rather than a stack trace that obscures the other results.
+          # Parsed defensively with jq: if discovery returns non-JSON or drops
+          # the key (a broken deploy, an error page), that surfaces as a plain
+          # failed check rather than as noise that obscures the other results.
+          #
+          # jq, NOT an inline python heredoc. A multi-line `python3 -c '...'`
+          # cannot live here: its continuation lines sit at column 0, which
+          # ends the `run: |` block scalar and turns them into top-level YAML
+          # keys. That made this entire workflow file invalid and every run
+          # failed at startup with zero jobs -- see the comment at the top.
           cimd="$(curl -sS --retry 3 --retry-delay 2 \
             "$BASE/.well-known/oauth-authorization-server" \
-            | python3 -c 'import sys,json
-try:
-    print(json.load(sys.stdin).get("client_id_metadata_document_supported", "<key-absent>"))
-except Exception:
-    print("<not-json>")' || echo "<unreachable>")"
-          check "CIMD advertised" True "$cimd"
+            | jq -r '.client_id_metadata_document_supported // "<key-absent>"' \
+            || echo "<not-json>")"
+          check "CIMD advertised" true "$cimd"
 
           exit $fail
