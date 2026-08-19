@@ -1,0 +1,165 @@
+name: Release
+
+# Tag-triggered, following secure-container-template's release shape: the tag
+# IS the release trigger, so cutting a release is `git tag -s vX.Y.Z && git
+# push --tags` and nothing else.
+#
+# What this publishes is the TOOLCHAIN image, not the gateway. The gateway is
+# a Cloudflare Worker and ships via deploy.yml on merge to main -- see the
+# header comment in Dockerfile. Tagging does not deploy anything.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing vX.Y.Z tag to (re)build and publish"
+        required: true
+
+permissions:
+  contents: write   # create the GitHub Release
+  packages: write   # push to GHCR
+  id-token: write   # keyless cosign signing via GitHub's OIDC token
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository }}-toolchain
+  PLATFORMS: linux/amd64,linux/arm64
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, and publish the toolchain image
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions pinned to a full commit SHA, never a mutable tag --
+      # same rule as ci.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Resolve release tag
+        id: vars
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      # A tag whose version disagrees with VERSION / package.json is a
+      # mis-cut release. Catch it before anything is published, not after.
+      - name: Verify the tag matches VERSION and package.json
+        run: |
+          VERSION="${{ steps.vars.outputs.version }}"
+          FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          echo "tag=${VERSION}  VERSION=${FILE_VERSION}  package.json=${PKG_VERSION}"
+          if [ "$VERSION" != "$FILE_VERSION" ] || [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ${{ steps.vars.outputs.tag }} disagrees with VERSION (${FILE_VERSION}) or package.json (${PKG_VERSION}). Bump them in the same commit you tag."
+            exit 1
+          fi
+
+      # The image is only worth publishing if the code in it passes the same
+      # gate main does. This duplicates ci.yml deliberately: a tag can point at
+      # any commit, including one that never went through a pull request.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Audit production dependencies (must be zero)
+        run: npm audit --omit=dev --audit-level=low
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+
+      # GHCR rather than Docker Hub: it authenticates with the workflow's own
+      # GITHUB_TOKEN, so a release needs no long-lived registry credential
+      # stored as a repo secret.
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          sbom: true          # attach an SBOM attestation
+          provenance: mode=max # full SLSA build provenance
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.vars.outputs.tag }}
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless: the signature is bound to this workflow's OIDC identity, so
+      # there is no signing key to store or rotate. Verify with:
+      #   cosign verify ghcr.io/mazze93/github-mcp-gateway-toolchain:vX.Y.Z \
+      #     --certificate-identity-regexp '^https://github.com/mazze93/github-mcp-gateway/' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: Sign the image (keyless)
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.vars.outputs.tag }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — leaving it untouched."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --generate-notes \
+            --notes-file - <<NOTES
+          ## Toolchain image
+
+          \`\`\`
+          ${{ env.IMAGE }}:${TAG}
+          \`\`\`
+
+          Digest: \`${DIGEST}\`
+          Platforms: \`${{ env.PLATFORMS }}\`
+
+          Signed keyless with cosign, published with an SBOM and SLSA
+          provenance attestation. Verify:
+
+          \`\`\`bash
+          cosign verify ${{ env.IMAGE }}:${TAG} \\
+            --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          \`\`\`
+
+          > This image builds and deploys the Worker — it does not run the
+          > gateway. The gateway is live at
+          > https://github-mcp-gateway.mazzewhiteley93.workers.dev/mcp and ships
+          > via \`deploy.yml\` on merge to \`main\`.
+          NOTES

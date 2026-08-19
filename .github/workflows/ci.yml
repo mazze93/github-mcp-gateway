@@ -67,3 +67,55 @@ jobs:
 
       - name: Audit dev dependencies (report only)
         run: npm audit || true
+
+      # Build the toolchain image on every PR, WITHOUT pushing. release.yml
+      # only runs on a tag, so without this the Dockerfile would first be
+      # exercised at release time -- the one moment a failure is most
+      # expensive. amd64 only here; the multi-arch build stays in release.yml
+      # where the QEMU emulation cost is paid once.
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+
+      - name: Build toolchain image (never pushes)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: github-mcp-gateway-toolchain:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Proves the entrypoint actually resolves inside the distroless final
+      # stage -- a Dockerfile that builds but cannot run wrangler is a
+      # Dockerfile that fails at the worst possible moment.
+      - name: Smoke-test the image entrypoint
+        run: |
+          # `wrangler --version` prints the bare version ("4.119.0") with no
+          # product name, so assert on the shape rather than on a substring.
+          VERSION="$(docker run --rm github-mcp-gateway-toolchain:ci --version | tr -d '\r')"
+          echo "wrangler in image: ${VERSION}"
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::Image entrypoint did not report a wrangler version (got: ${VERSION})"
+            exit 1
+          fi
+          # And it must be the version the lockfile pins, or the image is not
+          # the reproducible toolchain it claims to be.
+          EXPECTED="$(node -p "require('./node_modules/wrangler/package.json').version")"
+          if [ "$VERSION" != "$EXPECTED" ]; then
+            echo "::error::Image wrangler ${VERSION} != lockfile wrangler ${EXPECTED}"
+            exit 1
+          fi
+
+      # A non-root final stage is a hardening claim; assert it rather than
+      # trusting the Dockerfile to stay that way.
+      - name: Assert the image does not run as root
+        run: |
+          UID_IN_IMAGE="$(docker image inspect github-mcp-gateway-toolchain:ci --format '{{.Config.User}}')"
+          echo "image USER: ${UID_IN_IMAGE}"
+          if [ -z "$UID_IN_IMAGE" ] || [ "$UID_IN_IMAGE" = "root" ] || [ "$UID_IN_IMAGE" = "0" ] || [ "${UID_IN_IMAGE%%:*}" = "0" ]; then
+            echo "::error::Toolchain image runs as root"
+            exit 1
+          fi
