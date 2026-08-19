@@ -3,13 +3,25 @@
   "name": "github-mcp-gateway",
   "main": "src/index.ts",
   "compatibility_date": "2025-04-01",
-  // global_fetch_strictly_public is REQUIRED for CIMD (Client ID Metadata
-  // Documents) — workers-oauth-provider gates CIMD support on it, and Claude
-  // Code authenticates with a URL client_id
-  // (https://claude.ai/oauth/claude-code-client-metadata) rather than a
-  // DCR-registered one. Without this flag /authorize throws for every such
-  // client and the discovery document reports
-  // client_id_metadata_document_supported: false. Do not remove.
+  // global_fetch_strictly_public is NECESSARY BUT NOT SUFFICIENT for CIMD
+  // (Client ID Metadata Documents). workers-oauth-provider gates it on BOTH
+  // conditions:
+  //
+  //   client_id_metadata_document_supported:
+  //     !!options.clientIdMetadataDocumentEnabled && hasGlobalFetchStrictlyPublic()
+  //
+  // This flag satisfies the second. src/index.ts does not pass the first, so
+  // CIMD is currently OFF and the live discovery document reports
+  // client_id_metadata_document_supported: false. Verified against the
+  // deployed Worker on 2026-08-19.
+  //
+  // Nothing visibly broke because Claude Code falls back to Dynamic Client
+  // Registration (/register), which this server supports. Enabling CIMD is a
+  // deliberate change: flip the provider option and deploy.yml's smoke-test
+  // expectation in the same commit.
+  //
+  // Keep the flag regardless — removing it would make CIMD unreachable even
+  // once the provider option is set.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "observability": {
     "enabled": true

@@ -13,8 +13,9 @@ GITHUB_APP_CLIENT_SECRET=
 # 32+ random bytes. Generate with: openssl rand -hex 32
 COOKIE_ENCRYPTION_KEY=
 
-# Comma-separated GitHub logins allowed to use this server, e.g. "mazze93".
+# Comma-separated GitHub logins allowed to use this server, e.g. "octocat".
+# Set this to YOUR login. Leaving it unset denies everyone (fail-closed).
 # Defense-in-depth: even though only you can complete the GitHub OAuth
 # handshake for your own account, this gates tool exposure explicitly
 # rather than relying solely on "whoever can authenticate."
-ALLOWED_GITHUB_LOGINS=mazze93
+ALLOWED_GITHUB_LOGINS=your-github-login
