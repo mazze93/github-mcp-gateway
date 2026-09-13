@@ -26,6 +26,21 @@ updates:
           - minor
           - patch
 
+    # vitest majors are held back ON PURPOSE. @cloudflare/vitest-pool-workers
+    # peers on `vitest@^4.1.0` and no published version of it accepts vitest 5
+    # (checked every release through 0.22.0). A vitest 5 bump therefore cannot
+    # install at all -- `npm ci` dies with ERESOLVE before a single test runs,
+    # which takes CI *and* deploy.yml down together, since both start with
+    # `npm ci`. That is exactly what happened on 2026-09-13.
+    #
+    # Remove this ignore only once vitest-pool-workers declares a peer range
+    # that includes 5, and bump the two together in one PR:
+    #   npm view @cloudflare/vitest-pool-workers peerDependencies.vitest
+    ignore:
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
