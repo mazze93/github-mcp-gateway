@@ -73,6 +73,27 @@ jobs:
                   print(f"ok  {path}  jobs={list(doc['jobs'])}")
           sys.exit(1 if failed else 0)
           PY
+      # VERSION, package.json, and package-lock.json each carry the project's
+      # version independently, and they drift silently. release.yml checks the
+      # TAG against the first two -- nothing checked the lockfile, and nothing
+      # checked anything on a normal PR. v1.1.0 shipped with the lockfile still
+      # saying 1.0.0 and CI stayed green, because `npm ci` reconciles dependency
+      # trees, not the project's own version string.
+      #
+      # Cheap to assert, so assert it on every PR rather than discovering it at
+      # release time.
+      - name: Version sources agree
+        run: |
+          FILE_V="$(tr -d '[:space:]' < VERSION)"
+          PKG_V="$(node -p "require('./package.json').version")"
+          LOCK_V="$(node -p "require('./package-lock.json').version")"
+          LOCK_ROOT_V="$(node -p "require('./package-lock.json').packages[''].version")"
+          echo "VERSION=${FILE_V}  package.json=${PKG_V}  lock=${LOCK_V}  lock.packages['']=${LOCK_ROOT_V}"
+          if [ "$FILE_V" != "$PKG_V" ] || [ "$FILE_V" != "$LOCK_V" ] || [ "$FILE_V" != "$LOCK_ROOT_V" ]; then
+            echo "::error::Version sources disagree. Bump them together -- \`npm version <v> --no-git-tag-version\` updates package.json AND package-lock.json; VERSION must be edited alongside."
+            exit 1
+          fi
+
       - name: Typecheck
         run: npm run typecheck
 
