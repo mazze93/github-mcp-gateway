@@ -21,6 +21,65 @@ change to the container.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-13
+
+Everything below shipped to the live Worker between 2026-08-19 and
+2026-09-13 but sat untagged — `v1.0.0` was cut mid-session and the work
+kept going past it. 1.1.0 closes that gap. Minor, not major: no tool was
+renamed or removed and no tool result shape changed.
+
+### Fixed
+
+- **`vitest` 5 could not install at all, and it took CI *and* deploys down
+  with it.** `@cloudflare/vitest-pool-workers` peers on `vitest@^4.1.0` and
+  no published release accepts 5 — every version through 0.22.0 declares
+  `^4.1.0`. Both workflows begin with `npm ci`, so the ERESOLVE failed
+  before a single test ran. Production kept serving the last good version,
+  but for several hours every merge landed nowhere. Pinned back to
+  `^4.1.11`, with a Dependabot `ignore` on vitest majors and the explicit
+  condition for lifting it.
+- **CIMD was off despite the compatibility flag being set.** The provider
+  gates it on `!!options.clientIdMetadataDocumentEnabled &&
+  hasGlobalFetchStrictlyPublic()`, and only the second was satisfied — so
+  `global_fetch_strictly_public` had been inert since it was added. A URL
+  `client_id` silently fell back to a bare `OAUTH_KV.get("client:<url>")`
+  instead of fetching the metadata document, meaning Claude Code
+  authenticated only while a stale KV record happened to survive. Now
+  enabled, and the discovery document's
+  `client_id_metadata_document_supported: true` is finally accurate.
+- **The post-deploy smoke test raced edge propagation.** `wrangler deploy`
+  returns when the upload is accepted, not when the new version serves
+  everywhere, so the suite could read the *previous* version and report a
+  failure that was not real. It now retries the suite as a unit with
+  bounded backoff, and distinguishes a genuine regression from a timing
+  artifact in the error message.
+
+### Changed
+
+- Toolchain moved to **Node 24 (Krypton LTS)** across all five places at
+  once — Dockerfile build stage, distroless runtime, and `ci.yml`,
+  `deploy.yml`, `release.yml`. Dependabot had proposed Node 26 for the
+  build stage alone, which would have installed dependencies under one
+  major and executed them under another; 26 also has no distroless runtime
+  published and is not an LTS line.
+- **The repository is now adoptable by a fork.** `scripts/setup.sh` creates
+  the KV namespace and rewrites `wrangler.jsonc`; `deploy.yml` reads
+  `vars.WORKER_BASE_URL` so a fork smoke-tests its own deployment rather
+  than the upstream one; and the maintainer's login no longer seeds a
+  fork's allowlist. The README states single-tenancy as a deliberate
+  threat-model decision rather than leaving it to be discovered.
+- Tool descriptions no longer leak the maintainer's private repository
+  names into every downstream user's tool schema.
+- `AGENTS.md` is a pointer to `CLAUDE.md` instead of a diverging copy of
+  it.
+- Discovery metadata: 14 repository topics, a sharpened description, and
+  `keywords`/`repository`/`bugs`/`homepage` in `package.json`.
+- Dependency bumps across the window, each gated by CI: `agents` 0.21.0
+  (which brings the `McpAgent` feature-freeze notice, recorded in
+  `CLAUDE.md`), plus wrangler, hono, workers-types, vitest-pool-workers,
+  qs, fast-uri, and several GitHub Actions groups.
+
+
 ## [1.0.0] - 2026-08-19
 
 First tagged release. The gateway itself has been deployed and in daily
@@ -84,5 +143,6 @@ process, the license, and the security policy caught up with it.
 - `package.json` declares the Apache-2.0 license that `LICENSE` already
   carried.
 
-[Unreleased]: https://github.com/mazze93/github-mcp-gateway/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/mazze93/github-mcp-gateway/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mazze93/github-mcp-gateway/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/mazze93/github-mcp-gateway/releases/tag/v1.0.0
