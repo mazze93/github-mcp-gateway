@@ -20,18 +20,39 @@
    item**, not as a claim to re-derive.
 2. A routine maintenance session set out to "clean up stale OAuth grants" in `OAUTH_KV`.
 3. It enumerated all 44 keys: 33 `client:`, 8 `grant:`, 2 `token:`, 1 `github:`.
-4. It classified a grant as *stale* when no matching `token:` key existed.
-5. Of 6 tokenless grants it split off a "Tier A" of 4 aged 37–54 days carrying no TTL.
-   One of them — `grant:mazze93:mHKjQbvTaNYfYqfr` — belonged to DCR client
-   `UnzCBxgStfhy5ryQ`, whose record names it **"Claude Code (github-mcp-gateway)"** with
-   redirect `http://localhost:3118/callback`: a live burst-mode harness, not an abandoned
-   browser login. The client name was printed in the review table but never cross-checked
-   against liveness.
+4. It classified a grant as a cleanup candidate on **four converging signals**, not one: no
+   matching `token:` key; no KV TTL; age 37–54 days; and `resource=/` rather than `/mcp`, marking
+   it as predating the 2026-09-13 RFC 8707 fix. It also did substantial diligence first — read the
+   library's own `revokeGrant` to learn the correct deletion shape, confirmed
+   `DEFAULT_ACCESS_TOKEN_TTL = 3600` was not overridden, consulted an advisor, and stated
+   explicitly in its own review table that *"'idle' = no tool call in the last hour, not
+   'abandoned.'"* This was not a careless pass.
+5. Of 6 tokenless grants it split off a "Tier A" of 4, held back a "Tier B" of 2 recent ones, and
+   presented the split for confirmation. One Tier A entry —
+   `grant:mazze93:mHKjQbvTaNYfYqfr` — belonged to DCR client `UnzCBxgStfhy5ryQ`: a live
+   burst-mode harness registered as "Claude Code (github-mcp-gateway)" on
+   `http://localhost:3118/callback`.
+
+   **That friendly name was NOT visible at decision time.** It was recovered afterwards, during
+   post-incident analysis, by reading the `client:` record. What the confirmation table actually
+   showed in the client column was the raw identifier **`DCR UnzCBx…`** — while every other row
+   resolved to a legible name (`claude-code`, `mcp-oauth`). The signal that was genuinely present,
+   and genuinely missed, is therefore narrower and more interesting than "the name was printed":
+   **the one row that mattered was the only row whose client did not resolve to a friendly name,
+   and that anomaly was rendered distinctly and not investigated.**
 6. The operator confirmed Tier A. `wrangler kv bulk delete delete_tierA.json --remote --force`
    ran. 44 → 40 keys. Irreversible.
 7. A concurrent Claude Code session in the same terminal window ended at that moment.
 
 ## 2. Why the classification was wrong
+
+**Four signals, one blind spot.** The four criteria in step 4 look like convergent evidence and
+feel like corroboration, but **every one of them measures age, not liveness**: a missing `token:`
+key means no call in an hour; no TTL means the grant was written before `refreshTokenTTL` would
+have applied (and it never was — see §3); 37–54 days is age; and `resource=/` means the grant
+predates a fix, which again is age. A long-lived burst harness that authorized in July and
+refreshes rarely scores "stale" on all four simultaneously. **Convergent evidence that shares a
+common blind spot is not corroboration — it is the same measurement taken four times.**
 
 **The staleness test could not distinguish "idle but live" from "abandoned."**
 
@@ -97,8 +118,15 @@ new authorization. A one-time backfill would leave the class fully open.
 3. The reclamation action is irreversible *and* actively hostile: revoking a grant does not
    passively free space, it breaks the live client holding it on its next call.
 4. Human confirmation ratified the *classification*, not ground truth. The review table showed
-   age / TTL / "idle" — not "this client is currently running as a process." The
-   decision-relevant fact was derivable and simply not derived.
+   age, TTL, resource path and "idle" — not "this client is currently running as a process." The
+   decision-relevant fact was derivable and simply not derived. Note in fairness to the operator:
+   the table gave them no way to see it. The only trace was an unresolved DCR id in a column where
+   every other row read as a product name.
+4b. **The blast-radius assessment was wrong for the client that mattered.** The session reasoned,
+   explicitly and in writing, that *"recovery from a wrong delete is just a reconnect."* That holds
+   for an interactive client, which is what every other grant was. It does not hold for an
+   unattended burst harness mid-run: re-auth is not automatic, and work since the last checkpoint
+   can be lost. The risk was assessed against the majority case and applied to the exception.
 5. Structurally, a routine maintenance session held unsupervised `--force` delete authority over
    a shared auth store that sibling live agents depend on: a self-inflicted DoS surface with no
    interlock.
@@ -107,6 +135,12 @@ new authorization. A one-time backfill would leave the class fully open.
 
 **Confirmed:**
 - 4 `grant:` keys deleted; one belonged to a live harness client; not recoverable.
+- The deleting session **verified its own MCP connection afterwards** (a `github_get_repo` call
+  succeeded) and reported the cleanup as clean. That verification was sound but tested the wrong
+  subject — its own grant was deliberately retained. No check covered the sibling.
+- Only `grant:` keys were deleted. `client:UnzCBxgStfhy5ryQ` and `github:tokens:mazze93` were
+  untouched, so the client registration and the GitHub login survive; what was destroyed is the
+  authorization binding between them.
 - No filesystem, git, or Stratum data was lost — `OAUTH_KV` held no such keys and git
   checkpoints live on disk.
 - `DEFAULT_ACCESS_TOKEN_TTL = 3600`, not overridden.
