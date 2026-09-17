@@ -10,18 +10,26 @@
 
 ## 1. What happened
 
-1. A routine maintenance session set out to "clean up stale OAuth grants" in `OAUTH_KV`.
-2. It enumerated all 44 keys: 33 `client:`, 8 `grant:`, 2 `token:`, 1 `github:`.
-3. It classified a grant as *stale* when no matching `token:` key existed.
-4. Of 6 tokenless grants it split off a "Tier A" of 4 aged 37–54 days carrying no TTL.
+0. **(2026-09-13)** A prior session cut v1.1.0, resolved an RFC 8707 resource-path mismatch, and
+   recorded in memory that it had **"flagged 5 stale KV grants for cleanup."** This was an
+   *observation*, produced by the same 1-hour-token inference described in §2. The note carried the
+   conclusion but not the reasoning, and no liveness context.
+1. **(2026-09-17, 07:50)** A session opened with no task. It found no journal, checkpoint or handoff
+   file in the repo, a clean tree, no open PRs and no open issues — so it went to memory for the
+   trail and surfaced the 09-13 note. The "5 stale grants" line was read as a **sanctioned work
+   item**, not as a claim to re-derive.
+2. A routine maintenance session set out to "clean up stale OAuth grants" in `OAUTH_KV`.
+3. It enumerated all 44 keys: 33 `client:`, 8 `grant:`, 2 `token:`, 1 `github:`.
+4. It classified a grant as *stale* when no matching `token:` key existed.
+5. Of 6 tokenless grants it split off a "Tier A" of 4 aged 37–54 days carrying no TTL.
    One of them — `grant:mazze93:mHKjQbvTaNYfYqfr` — belonged to DCR client
    `UnzCBxgStfhy5ryQ`, whose record names it **"Claude Code (github-mcp-gateway)"** with
    redirect `http://localhost:3118/callback`: a live burst-mode harness, not an abandoned
    browser login. The client name was printed in the review table but never cross-checked
    against liveness.
-5. The operator confirmed Tier A. `wrangler kv bulk delete delete_tierA.json --remote --force`
+6. The operator confirmed Tier A. `wrangler kv bulk delete delete_tierA.json --remote --force`
    ran. 44 → 40 keys. Irreversible.
-6. A concurrent Claude Code session in the same terminal window ended at that moment.
+7. A concurrent Claude Code session in the same terminal window ended at that moment.
 
 ## 2. Why the classification was wrong
 
@@ -76,6 +84,12 @@ new authorization. A one-time backfill would leave the class fully open.
 
 ### Root-cause chain (corrected)
 
+0. **Observation-to-directive drift across a session boundary.** "Stale" was an *inference* on
+   09-13 and a *task* on 09-17. Memory preserved the conclusion and discarded the hedge, so the
+   executing session inherited a classification it never re-derived and could not see the basis of.
+   The unsafe action was effectively pre-authorized four days earlier by a note that was never
+   written as an authorization. **This is where the incident actually starts** — every later control
+   was operating on a premise already treated as settled.
 1. `refreshTokenTTL` unset ⇒ every grant is written with no KV expiration ⇒ grants accumulate
    indefinitely ⇒ the store invites manual pruning, which is the one unsafe operation.
 2. Staleness judged by an activity proxy (1-hour access-token presence) that cannot express
@@ -155,6 +169,15 @@ action.
 - **G7 — Confirmation dialogs must carry liveness as a mandatory field.** "Client last seen /
   running as PID X" must be present, and a grant whose client liveness is *unknown* is **blocked,
   not confirmable**.
+
+**Cross-session**
+- **G9 — A recorded observation is not a work item.** Memory and handoff notes must keep the
+  inference visible: not "5 stale grants flagged for cleanup" but "5 grants with no `token:` key —
+  *staleness inferred from 1h access-token TTL, liveness not checked*." Any note that licenses a
+  destructive action must carry the basis of its classification, and a session picking up such an
+  item must re-derive it before acting rather than treating the prior session's conclusion as
+  settled. Cheap rule of thumb: if a note would justify an irreversible action on its own, it needs
+  its evidence attached or it needs a question mark.
 
 **Harness-side (blast radius)**
 - **G8 — Flush on auth failure.** A burst client should treat `ReauthorizationRequiredError` as a
