@@ -27,7 +27,7 @@
 
 **The staleness test could not distinguish "idle but live" from "abandoned."**
 
-`DEFAULT_ACCESS_TOKEN_TTL = 3600` (`@cloudflare/workers-oauth-provider/dist/oauth-provider.js:1262`),
+`DEFAULT_ACCESS_TOKEN_TTL = 3600` (`oauth-provider.js:3065` (workers-oauth-provider 0.10.3)),
 and the app never overrides `accessTokenTTL` — verified: no occurrence in `src/`. Access tokens
 are therefore 1-hour objects, so **"no `token:` key" means only "no tool call in the last hour."**
 A burst harness between bursts is indistinguishable in KV from a dead session. The heuristic
@@ -39,16 +39,19 @@ The initial write-up attributed the missing TTLs to the grants being old: *"they
 `saveGrantWithTTL`, so they never self-expire."* **This is wrong, and the correction matters
 because it changes the fix.**
 
-`saveGrantWithTTL` (`oauth-provider.js:1010`) runs for *every* grant, but:
+`saveGrantWithTTL` (`oauth-provider.js:2763`) runs for *every* grant, but:
 
 ```js
 async saveGrantWithTTL(env, grantKey, grantData, now) {
-  const kvOptions = grantData.expiresAt !== void 0 ? { expiration: grantData.expiresAt } : {};
+  const minExpiration = now + KV_MIN_EXPIRATION_TTL_SECONDS + KV_EXPIRATION_CLAMP_MARGIN_SECONDS;
+  const kvOptions = grantData.expiresAt !== void 0
+    ? { expiration: Math.max(grantData.expiresAt, minExpiration) } : {};
   await env.OAUTH_KV.put(grantKey, JSON.stringify(grantData), kvOptions);
+  …
 }
 ```
 
-It sets an expiration only when `grantData.expiresAt` is defined. That is set at line 505:
+It sets an expiration only when `grantData.expiresAt` is defined. That is set at line 1964, from `this.options.refreshTokenTTL` (line 1912), which has no default:
 
 ```js
 const expiresAt = refreshTokenTTL !== void 0 ? now + refreshTokenTTL : void 0;
@@ -167,12 +170,40 @@ action.
 - [ ] G4/G5/G7: encode in whatever runbook or tool performs auth-store maintenance.
 - [ ] Re-authorize the broken client(s) when next used — expected symptom is a re-auth prompt.
 
-## 8. Unrelated observations found while verifying
+## 8. Verification provenance — two clones exist
 
-- `package.json` / `package-lock.json` are **staged but uncommitted** in this repo (a workerd /
-  dependency bump, `1.20260730.1` → `1.20260908.1`). Left untouched by this incident write-up —
-  it needs its own review and commit.
-- The per-project memory directory for this repo is keyed
-  `~/.claude/projects/-Users-mazze-Code-systems-github-mcp-gateway/`, a path that does not exist.
-  The repo actually lives at `~/Projects/tools/github-mcp-gateway`. Stale slug; worth correcting
-  so memory lands where it can be found.
+**This matters for anyone re-checking the above.** There are two clones of this repo on this
+machine, under two different home directories:
+
+| Clone | State | Library |
+|---|---|---|
+| `/Users/mazze/Code/systems/github-mcp-gateway` | **canonical** — `main` at v1.1.0 (PRs #52–54), clean | `@cloudflare/workers-oauth-provider ^0.10.3` |
+| `/Users/daedalus/Projects/tools/github-mcp-gateway` | **stale** — ~50 PRs behind, dependency bump left staged | `^0.2.2` |
+
+Both point at `origin https://github.com/mazze93/github-mcp-gateway.git`.
+
+The first pass of this analysis was performed against the **stale** clone and quoted line numbers
+from library 0.2.2. **Every finding was then re-verified against the canonical clone on 0.10.3 and
+all of them hold** — `refreshTokenTTL` is set nowhere in `src/`, `DEFAULT_ACCESS_TOKEN_TTL` is
+still 3600 (`:3065`) and still only a fallback (`:2155`), `saveGrantWithTTL` still writes empty KV
+options when `expiresAt` is undefined (`:2763`), and `helpers.ts:32–34` still returns `fail(...)`
+rather than throwing. Only the line numbers changed; the conclusions did not. Line references in
+this document are to **0.10.3**.
+
+0.10.3 additionally clamps grant expirations to a floor of `KV_MIN_EXPIRATION_TTL_SECONDS` (60) +
+`KV_EXPIRATION_CLAMP_MARGIN_SECONDS` (5) — relevant only in that a very small `refreshTokenTTL`
+cannot be used to expire grants aggressively.
+
+## 9. Other observations found while verifying
+
+- `package.json` / `package-lock.json` are **staged but uncommitted in the stale clone** (a workerd
+  bump, `1.20260730.1` → `1.20260908.1`). Left untouched. Given that clone is ~50 PRs behind
+  canonical, the bump is probably better discarded than committed — but that is a judgement call
+  for a human, not something this write-up should decide.
+- The per-project memory directory keyed `-Users-mazze-Code-systems-github-mcp-gateway` is
+  **correct, not stale** — it matches the canonical clone's real path. (An earlier draft of this
+  document called it rot, on the mistaken assumption that `/Users/mazze` did not exist.) The
+  consequence to be aware of is the reverse: memory written under that slug will **not** auto-load
+  for a session started from `~/Projects/tools/github-mcp-gateway`, so the two homes have
+  divergent memory as well as divergent code. That is a consolidation gap, tracked separately
+  under the account-consolidation work.
