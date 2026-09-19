@@ -28,7 +28,7 @@
 
 # Pinned by digest, not just tag: a tag can be repointed at arbitrary content
 # after review, which is the same reasoning that pins the SHAs in ci.yml.
-FROM node:24-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 
 WORKDIR /app
 
