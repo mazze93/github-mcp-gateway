@@ -40,10 +40,10 @@
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.10.3",
     "@modelcontextprotocol/sdk": "1.30.0",
-    "agents": "^0.22.0",
-    "hono": "^4.13.7",
+    "agents": "^0.23.0",
+    "hono": "^4.13.8",
     "octokit": "^5.0.5",
-    "zod": "^4.6.2"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
