@@ -56,9 +56,10 @@ jobs:
           VERSION="${{ steps.vars.outputs.version }}"
           FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
           PKG_VERSION="$(node -p "require('./package.json').version")"
-          echo "tag=${VERSION}  VERSION=${FILE_VERSION}  package.json=${PKG_VERSION}"
-          if [ "$VERSION" != "$FILE_VERSION" ] || [ "$VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag ${{ steps.vars.outputs.tag }} disagrees with VERSION (${FILE_VERSION}) or package.json (${PKG_VERSION}). Bump them in the same commit you tag."
+          LOCK_VERSION="$(node -p "require('./package-lock.json').version")"
+          echo "tag=${VERSION}  VERSION=${FILE_VERSION}  package.json=${PKG_VERSION}  lock=${LOCK_VERSION}"
+          if [ "$VERSION" != "$FILE_VERSION" ] || [ "$VERSION" != "$PKG_VERSION" ] || [ "$VERSION" != "$LOCK_VERSION" ]; then
+            echo "::error::Tag ${{ steps.vars.outputs.tag }} disagrees with VERSION (${FILE_VERSION}), package.json (${PKG_VERSION}), or package-lock.json (${LOCK_VERSION}). Bump them in the same commit you tag."
             exit 1
           fi
 
