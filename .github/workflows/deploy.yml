@@ -118,10 +118,10 @@ jobs:
           cimd="$(curl -sS --retry 3 --retry-delay 2 \
             "$BASE/.well-known/oauth-authorization-server" \
             | python3 -c 'import sys,json
-try:
-    print(json.load(sys.stdin).get("client_id_metadata_document_supported", "<key-absent>"))
-except Exception:
-    print("<not-json>")' || echo "<unreachable>")"
+          try:
+              print(json.load(sys.stdin).get("client_id_metadata_document_supported", "<key-absent>"))
+          except Exception:
+              print("<not-json>")' || echo "<unreachable>")"
           check "CIMD advertised" True "$cimd"
 
           exit $fail
