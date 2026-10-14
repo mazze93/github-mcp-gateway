@@ -21,6 +21,38 @@ change to the container.
 
 ## [Unreleased]
 
+### Changed
+
+- **OAuth tokens are now bound to the gateway's origin as their audience.**
+  `@cloudflare/workers-oauth-provider` 1.x (merged in #69 without its
+  migration, which left `main` failing typecheck and every deploy since
+  unable to ship) requires one canonical RFC 9728 resource fixed at
+  construction. It is the bare origin, derived per request: `/mcp` and
+  `/sse` are siblings at root, and 1.x only protects routes at or under the
+  resource's path. `/.well-known/oauth-protected-resource` now reports
+  `resource: <origin>` (0.x reported `<origin>/mcp` for the `/mcp` path).
+  MCP SDK clients read that value and send it back, so no client config
+  changes; a grant minted under 0.x fails its next refresh with
+  `invalid_grant` and the client re-authorizes once. Not a breaking change
+  under this file's definition: no client has to be reconfigured.
+- Dependencies: `agents` 0.24 → 0.28.1 and `@modelcontextprotocol/sdk`
+  1.30.0 → 1.32.1 (moved together; `agents` pins the SDK exactly), plus
+  `workers-oauth-provider` 1.2.3, hono, zod, wrangler, workers-types and
+  vitest-pool-workers 0.23.0.
+
+### Security
+
+- Production audit back to zero: the SDK 1.32.1 bump clears GHSA-6qxp-vccf-f47h
+  (OAuth client could send credentials to an authorization server chosen by
+  the MCP server), and lockfile refreshes clear proxy-addr (critical),
+  ip-address, fast-uri and source-map-js advisories.
+
+### Added
+
+- `test/entrypoint.test.ts` drives the real default export, so the
+  provider's construction-time configuration checks run in CI rather than
+  first surfacing as a failed deploy.
+
 ## [1.1.0] - 2026-09-13
 
 Everything below shipped to the live Worker between 2026-08-19 and
