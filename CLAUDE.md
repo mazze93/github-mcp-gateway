@@ -106,6 +106,11 @@ MCP client ──OAuth 2.1 (DCR, PKCE)──▶ Worker ──GitHub App OAuth─
 
 - `src/index.ts` — OAuthProvider wiring; `/mcp` + `/sse` registered at root
   (do NOT nest them under a path — workers-oauth-provider issues #108/#133).
+  workers-oauth-provider 1.x needs one canonical `resourceMetadata.resource`
+  (every token's audience) and only protects routes at/under its path, so
+  the resource is the bare request **origin** — one provider is built per
+  origin. Setting it to `<origin>/mcp` makes construction throw over `/sse`;
+  `test/entrypoint.test.ts` pins this.
 - `src/github-mcp-agent.ts` — Durable Object (`MCP_OBJECT`), one per session;
   registers all tool modules in `init()`.
 - `src/oauth/github-handler.ts` — consent screen, GitHub redirect, `/callback`
