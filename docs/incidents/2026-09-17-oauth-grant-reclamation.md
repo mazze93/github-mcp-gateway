@@ -221,9 +221,19 @@ action.
 ## 7. Follow-ups
 
 - [ ] Run the §4 repro to settle the causation question.
-- [ ] G1: set `refreshTokenTTL` in `src/index.ts` (decide the value deliberately — it is the
+- [x] G1: set `refreshTokenTTL` in `src/index.ts` (decide the value deliberately — it is the
       maximum lifetime of an unrefreshed authorization).
-- [ ] G1b: backfill `expiration` on the 4 remaining no-TTL grants.
+      **Status 2026-10-21: closed by the 1.x migration, not by an explicit setting.**
+      `workers-oauth-provider` 1.x (main is on 1.2.3 since #69/#79) defaults
+      `refreshTokenTTL` to 30 days (`DEFAULT_REFRESH_TOKEN_TTL = 720h` in
+      `dist/oauth-provider.js`), and `src/index.ts` does not override it — so new grants
+      self-expire. The explicit 90-day fix (3c10f66) was written against 0.x, where there was no
+      default; it was stranded on `ci/deploy-on-merge` and is deliberately *not* carried forward.
+      Pinning the value explicitly is still reasonable, so a future default change can't silently
+      reopen this — that is a policy choice, not a bug fix.
+- [ ] G1b: backfill `expiration` on the 4 remaining no-TTL grants. **Still open** — the 1.x
+      default applies only to grants created after the upgrade; grants minted under 0.x keep no
+      expiry until backfilled. Not verified against live OAUTH_KV (2026-10-21).
 - [ ] G4/G5/G7: encode in whatever runbook or tool performs auth-store maintenance.
 - [ ] Re-authorize the broken client(s) when next used — expected symptom is a re-auth prompt.
 
