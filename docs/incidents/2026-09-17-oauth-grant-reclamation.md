@@ -176,8 +176,12 @@ better — but the client's token age at the delete was not recorded, so neither
 
 ### Repro to settle it
 
-With a disposable burst client authorized under a test grant, delete only that `grant:` key via KV,
-then record three things separately, with timestamps:
+> **Never against production `OAUTH_KV`** (`0773ec3d…`). Run this only under `npm run dev`
+> (`wrangler dev`, local simulated KV) with a throwaway client, and only after the owner approves
+> the run. Deleting a live `grant:` key is the incident itself, not a test of it.
+
+With a disposable burst client authorized under a test grant on that local instance, delete only
+that `grant:` key from local KV, then record three things separately, with timestamps:
 
 1. **Tool results** — does a call return an `isError` re-auth result, or succeed?
 2. **`/token` responses** — the client's next refresh: expect `400 invalid_grant` /
