@@ -179,6 +179,19 @@ supporting it, and puts an environmental cause (both sessions in one terminal wi
 table. Caveat: "tokenless" came from one `KV.list()` snapshot; listing is eventually consistent,
 so a just-minted token could have been missed (unverified).
 
+**Client-side evidence (checked 2026-10-21).** Every `github-mcp-gateway` MCP client log readable
+from this machine for 2026-09-17 — four sessions, across both local accounts — shows its session
+*continuing* through the delete (≈ 12:12Z): SSE stream reconnects at the usual ~5–6 minute cadence,
+no auth error, logging for hours afterwards. The first `needs-auth` in any of them is at
+**15:01:58Z, ~2 h 50 min after the delete**, and it is in sessions whose grants were *kept* — a
+separate failure, cause not investigated. No log from the deleted grant's own client (the
+`localhost:3118` registration) was found.
+
+So no readable evidence shows any session failing at the delete. The session that ended has not
+been identified: transcripts under the second account are unreadable from this one, and a session
+with no gateway connection leaves no gateway log. The causal hypothesis is now **unsupported**, not
+merely unconfirmed.
+
 ### Repro to settle it
 
 > **Never against production `OAUTH_KV`** (`0773ec3d…`). Run this only under `npm run dev`
