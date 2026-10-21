@@ -270,10 +270,17 @@ action.
   checkpoint trigger (git commit + `stratum decide` flush) before re-auth, and degrade to re-auth
   rather than terminate, so an auth yank never costs the tail. *Gated on the §4 repro.*
 - **G9 — A loss must leave a record.** This incident could not be investigated because the session
-  that ended left nothing behind — no transcript, no log — so its loss erased its own evidence. A
-  burst harness must persist its transcript (never run with transcript saving off) and checkpoint
-  on a cadence that does not depend on any network call succeeding, so an abrupt death leaves a
-  last-known-good record to compare against. Not gated on the repro.
+  that ended left nothing anyone could find, so its loss erased its own evidence. G9 is a control,
+  not advice: it holds only where it is enforced, and its status is tracked here.
+  | Control | Enforces | Status |
+  |---|---|---|
+  | Machine-wide event ledger (`claude-stamp`, managed hooks) | every session stamps every event, independent of transcripts and network | installed 2026-10-01 — *after* this incident |
+  | E4 lost-session audit | every session with no `SessionEnd` and no live process is named with its last event | built + proved (`claude-stamp` #2); **not yet installed or hooked** |
+  | E1 append-only ledger | a session cannot truncate, delete or move the record | open |
+  | E2 ledger for every account; block prompts if unwritable | no account records silently nothing (the second account has no ledger today) | open |
+  | E3 off-box anchor re-armed | local tampering is detectable (last anchor 2026-10-08) | open |
+  | E5 command digests | "what did each session run at the moment" is answerable | open |
+  Until E1–E3 land, G9 is **partially enforced**.
 
 ## 7. Follow-ups
 
