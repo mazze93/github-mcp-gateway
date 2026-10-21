@@ -134,6 +134,64 @@ describe("getFreshAccessToken", () => {
 	});
 });
 
+describe("getFreshAccessToken under a concurrent refresh", () => {
+	const rotated = {
+		access_token: "winner-access-token",
+		refresh_token: "winner-refresh-token",
+		expires_in: 8 * 60 * 60,
+		refresh_token_expires_in: 180 * 24 * 60 * 60,
+	};
+
+	it("uses the successor another session stored instead of demanding re-authorization", async () => {
+		await env.OAUTH_KV.put(kvKey, JSON.stringify(storedToken({ accessTokenExpiresAt: Date.now() + 60 * 1000 })));
+		// The other session wins: it consumes the single-use refresh token and
+		// stores the successor; GitHub then rejects ours.
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				await env.OAUTH_KV.put(
+					kvKey,
+					JSON.stringify(
+						storedToken({ accessToken: "winner-access-token", refreshToken: "winner-refresh-token" }),
+					),
+				);
+				return Response.json({ error: "bad_refresh_token" });
+			}),
+		);
+
+		await expect(getFreshAccessToken(env, props)).resolves.toBe("winner-access-token");
+	});
+
+	it("still demands re-authorization when nobody rotated the stored pair", async () => {
+		await env.OAUTH_KV.put(kvKey, JSON.stringify(storedToken({ accessTokenExpiresAt: Date.now() + 60 * 1000 })));
+		vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "bad_refresh_token" })));
+
+		await expect(getFreshAccessToken(env, props)).rejects.toThrow(ReauthorizationRequiredError);
+	});
+
+	it("two simultaneous refreshes of one single-use token both end with a usable token", async () => {
+		await env.OAUTH_KV.put(kvKey, JSON.stringify(storedToken({ accessTokenExpiresAt: Date.now() + 60 * 1000 })));
+		// GitHub semantics: the first exchange of a refresh token succeeds, any
+		// later one is rejected. The loser's rejection arrives before the
+		// winner's KV write, which is the window the re-read retry covers.
+		let consumed = false;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				if (!consumed) {
+					consumed = true;
+					await new Promise((resolve) => setTimeout(resolve, 50));
+					return Response.json(rotated);
+				}
+				return Response.json({ error: "bad_refresh_token" });
+			}),
+		);
+
+		const results = await Promise.all([getFreshAccessToken(env, props), getFreshAccessToken(env, props)]);
+		expect(results).toEqual(["winner-access-token", "winner-access-token"]);
+	});
+});
+
 describe("ReauthorizationRequiredError", () => {
 	it("names the login in its message so the error is actionable", () => {
 		const error = new ReauthorizationRequiredError("mazze93");

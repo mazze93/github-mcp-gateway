@@ -47,6 +47,17 @@ change to the container.
   the MCP server), and lockfile refreshes clear proxy-addr (critical),
   ip-address, fast-uri and source-map-js advisories.
 
+### Fixed
+
+- **A concurrent GitHub token refresh no longer reports a false
+  "re-authorization required".** Every session shares one stored GitHub login,
+  and GitHub refresh tokens are single-use: when two sessions refreshed
+  together, the loser threw `ReauthorizationRequiredError` and told the user to
+  reconnect while the stored login was valid — and a reconnect can revoke the
+  client's other grants. `getFreshAccessToken()` now re-reads the stored pair
+  before throwing and uses a successor another session stored. KV has no
+  compare-and-swap, so this narrows the race rather than closing it.
+
 ### Added
 
 - `test/entrypoint.test.ts` drives the real default export, so the
