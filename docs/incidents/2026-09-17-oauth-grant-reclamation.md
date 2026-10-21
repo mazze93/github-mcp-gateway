@@ -275,12 +275,14 @@ action.
   | Control | Enforces | Status |
   |---|---|---|
   | Machine-wide event ledger (`claude-stamp`, managed hooks) | every session stamps every event, independent of transcripts and network | installed 2026-10-01 — *after* this incident |
-  | E4 lost-session audit | every session with no `SessionEnd` and no live process is named with its last event | built + proved (`claude-stamp` #2); **not yet installed or hooked** |
-  | E1 append-only ledger | a session cannot truncate, delete or move the record | open |
-  | E2 ledger for every account; block prompts if unwritable | no account records silently nothing (the second account has no ledger today) | open |
+  | E4 lost-session audit | every session with no `SessionEnd` and no live process is named with its last event, at every `SessionStart` | built + proved (`claude-stamp` #2, #3); **not yet installed** |
+  | E1 append-only ledger | a session cannot truncate, delete or rename the record file | in place (`sappnd`, since 2026-10-01) |
+  | E2 unwritable-ledger warning | a session that is not being recorded says so | built (`claude-stamp` #4), **not yet installed**. Blocking prompts instead was built and **rejected** before install: its own failure would stop every session on every account |
   | E3 off-box anchor re-armed | local tampering is detectable (last anchor 2026-10-08) | open |
-  | E5 command digests | "what did each session run at the moment" is answerable | open |
-  Until E1–E3 land, G9 is **partially enforced**.
+  | E5 command digests | "what did each session run at the moment" is answerable | built (`claude-stamp` #3), **not yet installed** |
+  G9 records and notices; it **never blocks** — a control whose own failure stops all work is
+  the same blast-radius error as this incident. Until the release is installed and E3 lands, G9 is
+  **partially enforced**.
 
 ## 7. Follow-ups
 
