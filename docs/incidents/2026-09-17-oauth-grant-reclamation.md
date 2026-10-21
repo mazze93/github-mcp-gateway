@@ -187,10 +187,15 @@ no auth error, logging for hours afterwards. The first `needs-auth` in any of th
 separate failure, cause not investigated. No log from the deleted grant's own client (the
 `localhost:3118` registration) was found.
 
-So no readable evidence shows any session failing at the delete. The session that ended has not
-been identified: transcripts under the second account are unreadable from this one, and a session
-with no gateway connection leaves no gateway log. The causal hypothesis is now **unsupported**, not
-merely unconfirmed.
+**What this does and does not show.** It shows that the four sessions whose logs are readable
+survived the delete. It does *not* show that no session died. The session that ended left no trace
+at all: no transcript entries in 12:08–12:14Z under either local account (both searched
+2026-10-21), and no gateway client log. That absence is exactly what an abrupt death would leave
+for a session holding its work in memory — and also what a session that never persisted a
+transcript would leave (one running with transcript saving off is a known mode on this machine).
+Absence cannot discriminate between these, so it is not evidence against the hypothesis. The
+causal link stays **unconfirmed**; the code paths above still predict no failure at the instant of
+the delete, and that is the tension the §4 repro exists to settle.
 
 ### Repro to settle it
 
@@ -264,6 +269,11 @@ action.
 - **G8 — Flush on auth failure.** A burst client should treat `ReauthorizationRequiredError` as a
   checkpoint trigger (git commit + `stratum decide` flush) before re-auth, and degrade to re-auth
   rather than terminate, so an auth yank never costs the tail. *Gated on the §4 repro.*
+- **G9 — A loss must leave a record.** This incident could not be investigated because the session
+  that ended left nothing behind — no transcript, no log — so its loss erased its own evidence. A
+  burst harness must persist its transcript (never run with transcript saving off) and checkpoint
+  on a cadence that does not depend on any network call succeeding, so an abrupt death leaves a
+  last-known-good record to compare against. Not gated on the repro.
 
 ## 7. Follow-ups
 
