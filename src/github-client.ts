@@ -48,7 +48,14 @@ export async function getFreshAccessToken(env: Env, props: Props): Promise<strin
 	});
 
 	if (errResponse || !refreshed) {
-		// GitHub rejected the refresh — most likely the user revoked access.
+		// GitHub refresh tokens are single-use, and this key is shared by every
+		// session for the login. If another session refreshed concurrently, it
+		// consumed our token and stored the successor, so GitHub rejects ours
+		// although the stored pair is valid. Check for that before telling the
+		// user to reconnect — a reconnect can revoke the other sessions' grants.
+		const successor = await rotatedElsewhere(env, key, stored.refreshToken);
+		if (successor) return successor;
+		// Nobody else rotated it — most likely the user revoked access.
 		throw new ReauthorizationRequiredError(props.login);
 	}
 
@@ -62,6 +69,29 @@ export async function getFreshAccessToken(env: Env, props: Props): Promise<strin
 	await env.OAUTH_KV.put(key, JSON.stringify(next));
 
 	return next.accessToken;
+}
+
+const SUCCESSOR_READS = 3;
+const SUCCESSOR_READ_DELAY_MS = 250;
+
+/**
+ * Re-read the stored pair after a failed refresh. Returns the access token a
+ * concurrent refresher stored, or null if the pair still holds the token we
+ * used. Retries briefly because the winner's write may land after GitHub
+ * rejected us. KV has no compare-and-swap, so this narrows the race; it cannot
+ * close it (a stale cross-location read can still miss the successor).
+ */
+async function rotatedElsewhere(env: Env, key: string, usedRefreshToken: string): Promise<string | null> {
+	for (let attempt = 0; attempt < SUCCESSOR_READS; attempt++) {
+		if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, SUCCESSOR_READ_DELAY_MS));
+		const raw = await env.OAUTH_KV.get(key);
+		if (!raw) return null;
+		const current = JSON.parse(raw) as StoredGitHubToken;
+		if (current.refreshToken !== usedRefreshToken && Date.now() < current.accessTokenExpiresAt) {
+			return current.accessToken;
+		}
+	}
+	return null;
 }
 
 /** Construct an Octokit client authenticated with a guaranteed-fresh token. */

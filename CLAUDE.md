@@ -11,10 +11,9 @@ via a GitHub App user-to-server OAuth flow.
 - **KV namespace:** `OAUTH_KV` = `0773ec3dd785418c984559f47d1623e9`
 - **Secrets set on the worker:** `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY`
 - **Allowlist var:** `ALLOWED_GITHUB_LOGINS="mazze93"` (in `wrangler.jsonc`)
-- **GitHub App permissions:** Contents RW, Issues RW, Pull requests RW, Metadata R.
-  It does **not** have Administration — `github_update_repo` will 403 until that
-  permission is added to the App and re-approved on the installation. Use the
-  locally-authenticated `gh` CLI as the fallback for repo description/topic edits.
+- **GitHub App permissions:** Contents RW, Issues RW, Pull requests RW, Metadata R,
+  Administration RW. `github_update_repo` works directly (verified 2026-10-21 with a
+  no-op description update).
 
 ## Commands
 
@@ -50,8 +49,7 @@ against the deployed worker is the verification bar.
 Three places, and they drift apart if only one is touched:
 
 - **Repo topics + description** — GitHub-side, not in the tree. Edit with
-  `gh repo edit --add-topic ...`. The GitHub App has no Administration
-  permission, so `github_update_repo` 403s here; `gh` is the path.
+  `github_update_repo` (the App has Administration) or `gh repo edit`.
 - **`package.json`** — `keywords`, `repository`, `bugs`, `homepage`. The
   package is `private: true` and unpublished, but registries and MCP
   directories read this file from the repo.
@@ -184,8 +182,14 @@ afterwards — tool lists are only fetched at session start.
 
 ## Recovery
 
-- **Re-auth required errors** from tools → the GitHub refresh token expired or
-  was revoked; disconnect/reconnect the MCP server in the client.
+- **Re-auth required errors** from tools → **retry the call once first.** Every
+  session shares one stored GitHub login, and GitHub refresh tokens are
+  single-use: two sessions refreshing together used to leave the loser with a
+  false re-auth error while the stored login was fine. `getFreshAccessToken()`
+  now re-reads KV before throwing, which narrows that race but cannot close it
+  (KV has no compare-and-swap). Only if the retry fails too did the refresh
+  token really expire or get revoked — then disconnect/reconnect. A reconnect
+  re-authorizes and can revoke this client's other grants, so it is not free.
 - **Client connection fails at token exchange** → check workers-oauth-provider
   issues #133/#108 (path audience validation) before debugging locally.
 - Changing GitHub App permissions requires Mazze to approve the change on the
