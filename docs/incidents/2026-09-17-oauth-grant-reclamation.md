@@ -159,20 +159,25 @@ terminate. The timing is exact, but no crash report or daemon-log exit was found
 timestamp, and the documented code path above predicts a clean error result, not process death.
 **Leading hypothesis, mechanism unverified.**
 
-That code path is not the only one a deleted grant reaches. Read against
-`workers-oauth-provider` 1.2.3 `dist/oauth-provider.js` (source reading, not yet exercised):
+No traced code path fails *at* the delete. Read against `workers-oauth-provider` 1.2.3
+`dist/oauth-provider.js` (source reading, not yet exercised):
 
-- **Access tokens outlive the grant.** `unwrapToken()` reads only `token:{user}:{grant}:{id}`,
-  which embeds its own copy of the grant, and never touches `grant:`. An access token issued
-  before the delete keeps passing validation until its own `expiresAt` (≤ 3600 s).
-- **Refresh fails at the OAuth layer, not in a tool.** `handleRefreshTokenGrant()` looks up
-  `grant:{user}:{grant}` and returns `400 invalid_grant` / `"Grant not found"` from `/token`. The
-  `github:tokens:` record and `ReauthorizationRequiredError` are never involved, so the
-  `helpers.ts` path above does not describe this failure.
+- **The `helpers.ts` path cannot fire.** `ReauthorizationRequiredError` comes from
+  `github:tokens:{login}`, which this delete did not touch (§4). A `grant:` delete alone never
+  produces it.
+- **There was no access token to outlive the grant.** The deleted grants were chosen *because*
+  no `token:` key matched (§1 step 5). Had one existed it would have kept working: `unwrapToken()`
+  reads only `token:{user}:{grant}:{id}`, which embeds its own copy of the grant, until its own
+  `expiresAt` (≤ 3600 s).
+- **So the first failure is a refresh, on the client's next request.** `handleRefreshTokenGrant()`
+  looks up `grant:{user}:{grant}` and returns `400 invalid_grant` / `"Grant not found"` from
+  `/token` — at the OAuth layer, not as a tool result.
 
-The two paths predict different timing: the tool path fails on the next tool call; the refresh
-path fails up to an hour later, at the client's next refresh. "Timing is exact" fits the first
-better — but the client's token age at the delete was not recorded, so neither is ruled out.
+A harness idle between bursts makes no request at the instant of the delete. The exact timing is
+therefore *not* explained by any path traced here: it weakens the causal hypothesis rather than
+supporting it, and puts an environmental cause (both sessions in one terminal window) back on the
+table. Caveat: "tokenless" came from one `KV.list()` snapshot; listing is eventually consistent,
+so a just-minted token could have been missed (unverified).
 
 ### Repro to settle it
 
@@ -183,15 +188,16 @@ better — but the client's token age at the delete was not recorded, so neither
 With a disposable burst client authorized under a test grant on that local instance, delete only
 that `grant:` key from local KV, then record three things separately, with timestamps:
 
-1. **Tool results** — does a call return an `isError` re-auth result, or succeed?
-2. **`/token` responses** — the client's next refresh: expect `400 invalid_grant` /
-   `"Grant not found"`. Force it (or wait out the access token) rather than assume it happened.
+1. **Request results** — with no live access token, expect the next call to be rejected at the
+   OAuth layer (`401`), not an `isError` tool result. Record which actually happens.
+2. **`/token` responses** — the client's refresh: expect `400 invalid_grant` /
+   `"Grant not found"`. Observe it rather than assume it happened.
 3. **Client process state** — does the client continue, prompt for re-auth, or terminate, and
-   after which of (1) or (2)?
+   relative to which of: the delete itself, (1), or (2)?
 
 Death after (2) points at how the Claude Code MCP client handles a failed refresh; death after (1)
-with no refresh points at the gateway or tool-result handling; neither points at environment. That
-decides whether G8 is the real fix or a nicety.
+points at the gateway or request handling; death at the delete, before any request, points away
+from both and at the environment. That decides whether G8 is the real fix or a nicety.
 
 ## 5. Vulnerability class
 
