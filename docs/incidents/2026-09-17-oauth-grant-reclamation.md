@@ -144,7 +144,8 @@ new authorization. A one-time backfill would leave the class fully open.
 - No filesystem, git, or Stratum data was lost — `OAUTH_KV` held no such keys and git
   checkpoints live on disk.
 - `DEFAULT_ACCESS_TOKEN_TTL = 3600`, not overridden.
-- `refreshTokenTTL` unset ⇒ grants never expire (§3).
+- `refreshTokenTTL` unset ⇒ grants never expire (§3). True of 0.x at incident time; 1.x
+  defaults it to 30 days — see §7.
 - `src/tools/helpers.ts:32` converts `ReauthorizationRequiredError` into a returned failure,
   **not** a throw:
   ```ts
@@ -158,12 +159,35 @@ terminate. The timing is exact, but no crash report or daemon-log exit was found
 timestamp, and the documented code path above predicts a clean error result, not process death.
 **Leading hypothesis, mechanism unverified.**
 
+That code path is not the only one a deleted grant reaches. Read against
+`workers-oauth-provider` 1.2.3 `dist/oauth-provider.js` (source reading, not yet exercised):
+
+- **Access tokens outlive the grant.** `unwrapToken()` reads only `token:{user}:{grant}:{id}`,
+  which embeds its own copy of the grant, and never touches `grant:`. An access token issued
+  before the delete keeps passing validation until its own `expiresAt` (≤ 3600 s).
+- **Refresh fails at the OAuth layer, not in a tool.** `handleRefreshTokenGrant()` looks up
+  `grant:{user}:{grant}` and returns `400 invalid_grant` / `"Grant not found"` from `/token`. The
+  `github:tokens:` record and `ReauthorizationRequiredError` are never involved, so the
+  `helpers.ts` path above does not describe this failure.
+
+The two paths predict different timing: the tool path fails on the next tool call; the refresh
+path fails up to an hour later, at the client's next refresh. "Timing is exact" fits the first
+better — but the client's token age at the delete was not recorded, so neither is ruled out.
+
 ### Repro to settle it
 
-With a disposable burst client authorized under a test grant, delete that grant via KV and observe
-whether the client (a) receives an `isError` re-auth result and continues, or (b) terminates. That
-single test decides whether the session death is a `github-mcp-gateway` defect, a Claude Code MCP
-client defect, or environment-specific — and therefore whether G8 is the real fix or a nicety.
+With a disposable burst client authorized under a test grant, delete only that `grant:` key via KV,
+then record three things separately, with timestamps:
+
+1. **Tool results** — does a call return an `isError` re-auth result, or succeed?
+2. **`/token` responses** — the client's next refresh: expect `400 invalid_grant` /
+   `"Grant not found"`. Force it (or wait out the access token) rather than assume it happened.
+3. **Client process state** — does the client continue, prompt for re-auth, or terminate, and
+   after which of (1) or (2)?
+
+Death after (2) points at how the Claude Code MCP client handles a failed refresh; death after (1)
+with no refresh points at the gateway or tool-result handling; neither points at environment. That
+decides whether G8 is the real fix or a nicety.
 
 ## 5. Vulnerability class
 
