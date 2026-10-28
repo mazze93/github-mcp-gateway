@@ -19,9 +19,10 @@ versions = {"Docker build": build[1], "Docker runtime": runtime[1]}
 for name in ("ci", "deploy", "release"):
     workflow = yaml.safe_load((root / f".github/workflows/{name}.yml").read_text())
     for job_name, job in workflow["jobs"].items():
-        for step in job.get("steps", []):
+        for index, step in enumerate(job.get("steps", [])):
             if step.get("uses", "").startswith("actions/setup-node@"):
-                versions[f"{name}/{job_name}"] = str(step["with"]["node-version"]).split(".")[0]
+                # Keyed by step so a second setup-node in one job cannot hide the first.
+                versions[f"{name}/{job_name}#{index}"] = str(step["with"]["node-version"]).split(".")[0]
     if not any(key.startswith(f"{name}/") for key in versions):
         raise SystemExit(f"{name}: no explicit setup-node version to verify")
 if len(set(versions.values())) != 1:
