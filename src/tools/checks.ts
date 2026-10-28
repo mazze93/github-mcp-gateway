@@ -7,6 +7,18 @@ const MISSING_PERMISSION =
 	"The GitHub App lacks the permissions this tool needs: Checks (read) and Commit statuses (read). " +
 	"The app owner can grant them at https://github.com/settings/installations.";
 
+/**
+ * GitHub answers a missing App permission with 403 "Resource not accessible by
+ * integration" -- accurate but opaque. Say what to grant, keep the status;
+ * anything else passes through unchanged.
+ */
+export function explainCheckError(error: unknown): unknown {
+	if ((error as { status?: number } | undefined)?.status === 403) {
+		return Object.assign(new Error(MISSING_PERMISSION), { status: 403 });
+	}
+	return error;
+}
+
 export function registerCheckTools(server: McpServer, env: Env, props: Props): void {
 	server.tool(
 		"github_get_check_runs",
@@ -49,12 +61,7 @@ export function registerCheckTools(server: McpServer, env: Env, props: Props): v
 						})),
 					};
 				} catch (error) {
-					// GitHub answers a missing App permission with 403 "Resource not accessible by
-					// integration" -- accurate but opaque. Say what to grant, keep the status.
-					if ((error as { status?: number }).status === 403) {
-						throw Object.assign(new Error(MISSING_PERMISSION), { status: 403 });
-					}
-					throw error;
+					throw explainCheckError(error);
 				}
 			}),
 	);

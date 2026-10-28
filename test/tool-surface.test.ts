@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { registerCheckTools } from "../src/tools/checks";
+import { explainCheckError, registerCheckTools } from "../src/tools/checks";
 import { registerContentTools } from "../src/tools/contents";
 import { registerIssueTools } from "../src/tools/issues";
 import { registerPullRequestTools } from "../src/tools/pulls";
@@ -160,19 +160,21 @@ describe("new tools", () => {
 		expect(body.checkRuns[0]).toMatchObject({ name: "ci", conclusion: "failure", app: "github-actions" });
 	});
 
-	it("github_get_check_runs explains a missing App permission instead of an opaque 403", async () => {
-		const denied = () => json({ message: "Resource not accessible by integration" }, 403);
-		stub({
-			"GET /repos/o/r/commits/main/check-runs": denied,
-			"GET /repos/o/r/commits/main/status": denied,
-		});
-		const result = await (await connect()).callTool({
-			name: "github_get_check_runs",
-			arguments: { owner: "o", repo: "r", ref: "main" },
-		});
-		expect(result.isError).toBe(true);
-		const text = (result.content as { text: string }[])[0].text;
-		expect(text).toContain("Checks (read)");
-		expect(text).toContain("(403)");
+	// Not driven through HTTP: Octokit's retry plugin leaks an unhandled rejection
+	// for ANY failed request (reproduced on github_get_file_contents too), which
+	// Vitest rightly treats as a failure. The mapping itself is what matters here.
+	it("explains a missing App permission instead of an opaque 403", () => {
+		const forbidden = Object.assign(new Error("Resource not accessible by integration"), { status: 403 });
+		const explained = explainCheckError(forbidden) as Error & { status: number };
+		expect(explained.status).toBe(403);
+		expect(explained.message).toContain("Checks (read)");
+		expect(explained.message).toContain("Commit statuses (read)");
 	});
+
+	it("passes any other error through unchanged", () => {
+		const notFound = Object.assign(new Error("Not Found"), { status: 404 });
+		expect(explainCheckError(notFound)).toBe(notFound);
+		expect(explainCheckError(undefined)).toBeUndefined();
+	});
+
 });
