@@ -1,7 +1,6 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { GitHubHandler } from "./oauth/github-handler";
 import { GitHubMcpAgent } from "./github-mcp-agent";
-import { normalizeLoopbackRedirect } from "./oauth/loopback";
 
 export { GitHubMcpAgent };
 
@@ -82,12 +81,10 @@ function providerFor(request: Request): OAuthProvider {
 	return provider;
 }
 
-// The provider is wrapped rather than exported directly so loopback redirect
-// URIs can be normalised before it validates them — see ./oauth/loopback.ts.
+// Let the provider validate registered redirect URIs without rewriting hosts.
+// Current versions support localhost, IPv4 loopback and IPv6 loopback directly.
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return normalizeLoopbackRedirect(request).then((normalized) =>
-			providerFor(normalized).fetch(normalized, env, ctx),
-		);
+		return providerFor(request).fetch(request, env, ctx);
 	},
 };

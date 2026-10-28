@@ -22,7 +22,7 @@ surface is small and specific:
 | Downstream OAuth 2.1 | `src/index.ts`, `@cloudflare/workers-oauth-provider` | Token issued to a client that shouldn't hold one; PKCE or audience bypass |
 | Consent / CSRF | `src/oauth/workers-oauth-utils.ts` | Forged consent, state replay, session fixation, cookie forgery against the HMAC-signed approved-clients cookie |
 | Identity gate | `src/oauth/allowlist.ts`, `/callback` | Any GitHub identity outside `ALLOWED_GITHUB_LOGINS` completing a grant |
-| Redirect handling | `src/oauth/loopback.ts` | A redirect URI reaching an origin other than loopback via the `localhost` → `127.0.0.1` normalisation |
+| Redirect handling | `src/index.ts`, `@cloudflare/workers-oauth-provider` | Unregistered redirect accepted, loopback host confusion, or non-loopback HTTP redirect accepted |
 | Upstream token storage | `src/github-client.ts`, `OAUTH_KV` | GitHub access/refresh tokens leaking to a client, a log, or a tool result |
 | Tool layer | `src/tools/*.ts` | A tool reaching a repository outside the GitHub App installation's grant |
 

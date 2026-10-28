@@ -20,10 +20,11 @@ via a GitHub App user-to-server OAuth flow.
 ```bash
 npm run typecheck   # tsc --noEmit
 npm test            # vitest run, via @cloudflare/vitest-pool-workers (real workerd, not a Node polyfill)
-npm test test/loopback.test.ts   # one file
+npm test test/oauth-boundaries.test.ts   # one file
 npm test -- -t "localhost"       # one test by name
 npm run dev         # wrangler dev at http://localhost:8788 (needs .dev.vars)
 npm run tail        # live worker logs
+bash scripts/test-toolchain.sh  # Apple container preferred; Docker fallback; dry-run only
 
 npx wrangler deploy --dry-run --outdir dist   # local build check; catches
                     # bundling/binding errors tsc cannot see. Never publishes.
@@ -31,17 +32,19 @@ npx wrangler deploy --dry-run --outdir dist   # local build check; catches
 
 **Deployment is automatic.** `.github/workflows/deploy.yml` typechecks, tests,
 and deploys on every push to `main` — it is the only place a Cloudflare token
-exists (`ci.yml` runs on PRs including forks and is deliberately
-credential-free). `npm run deploy` is a manual fallback, not the normal path;
+is exposed to a deploy step (`ci.yml` runs on PRs including forks and is
+deliberately credential-free). `npm run deploy` is a manual fallback, not the normal path;
 production drifting behind `main` because someone forgot to run it by hand is
 the exact failure that workflow was added to close.
 
 `test/*.test.ts` covers the OAuth allowlist gate, CSRF/state/signed-cookie
-handling, loopback redirect normalisation, token refresh, and tool
+handling, loopback redirect validation, token refresh, and tool
 error-wrapping — see `vitest.config.ts` for how bindings are sourced from
-`wrangler.jsonc`. CI runs it as a required gate. Not covered: the
-`GET`/`POST /authorize` route wiring, and a few timing/concurrency edges
-noted in PR #13's description. `typecheck` + `test` + a live tool call
+`wrangler.jsonc`. CI runs the suite as a verification gate. The authorize
+routes are covered in `test/authorize-routes.test.ts`;
+`test/oauth-boundaries.test.ts` also covers token audience isolation and
+legacy path-bound grant rejection. Cross-location KV refresh races remain
+a known limitation. `typecheck` + `test` + a live tool call
 against the deployed worker is the verification bar.
 
 ## Discovery metadata
@@ -118,18 +121,12 @@ MCP client ──OAuth 2.1 (DCR, PKCE)──▶ Worker ──GitHub App OAuth─
   would apply to the 302 to github.com). Change styling here, once.
 - `src/oauth/workers-oauth-utils.ts` — CSRF, one-time KV state, session-binding
   cookie, HMAC-signed approved-clients cookie. All cookies `__Host-` prefixed.
-- `src/oauth/loopback.ts` — rewrites `http://localhost:<port>` redirect URIs to
-  `127.0.0.1` on **both** `/authorize` and `/token`. It was written because
-  workers-oauth-provider's `isLoopbackUri()` did not recognise the hostname
-  `localhost` through 0.8.3.
-  **That is no longer true.** 0.10.3 (in use since #21) added
-  `if (host.toLowerCase() === "localhost") return true;`, and matching is
-  hostname-strict (`reqUrl.hostname === regUrl.hostname`). So the shim is
-  redundant — and for a client registering *only* `localhost` it would now
-  *cause* the mismatch it was written to prevent. Claude Code is unaffected: its
-  metadata document registers both `http://localhost/callback` and
-  `http://127.0.0.1/callback`. Removing it is a live-OAuth change that needs a
-  real Claude Code reconnect to verify, so it stays until someone does that.
+- Loopback redirect URIs are validated directly by workers-oauth-provider:
+  `localhost`, IPv4 loopback and IPv6 `::1` retain their registered hostname
+  while ephemeral ports are accepted. Do not rewrite localhost to an IP:
+  that breaks hostname-strict registrations. `test/oauth-boundaries.test.ts`
+  exercises registration, GitHub callback and PKCE token exchange through
+  the real entrypoint, with only upstream GitHub HTTP calls mocked.
 - `src/oauth/allowlist.ts` — `isLoginAllowed()`, the pure predicate behind
   `ALLOWED_GITHUB_LOGINS`; `src/oauth/utils.ts` — GitHub App authorize-URL and
   token/refresh exchange (App flow, so `scope` is ignored upstream; repo access

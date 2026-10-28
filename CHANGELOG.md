@@ -21,6 +21,26 @@ change to the container.
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove the obsolete localhost-to-IPv4 redirect rewrite. Clients registered
+  only for localhost now complete authorization and PKCE exchange; IPv4 and
+  IPv6 loopback registrations keep their own hostnames and ephemeral ports.
+- Run the full test suite on the exact deployment commit before publishing.
+- Refresh compatible transitive body-parser, fast-uri and qs versions to
+  clear three production audit failures discovered during verification.
+- Align both toolchain image stages with CI/deploy/release on Node 24, pin
+  both base images by digest, and reject split majors or missing pins in CI.
+  CI also dry-run builds the Worker using the final non-root image.
+
+### Added
+
+- `bash scripts/test-toolchain.sh` builds and checks the final image with
+  Apple container when available, with a Docker fallback.
+- Real-provider OAuth flow tests for localhost/IPv4/IPv6, unregistered
+  redirect rejection, cross-origin access/refresh rejection, and old
+  path-bound grants. These replace the removed rewrite-helper unit tests.
+
 ### Changed
 
 - **Landing and consent pages are branded as a mazzeleczzare.com project.**
