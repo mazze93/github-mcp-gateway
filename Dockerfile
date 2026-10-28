@@ -12,7 +12,7 @@
 #
 # What this image IS: a pinned, reproducible toolchain that builds and deploys
 # that Worker. CI and a workstation both invoke the same wrangler, resolved
-# from the same lockfile, on the same Node minor -- so "works on my machine"
+# from the same lockfile, on the same Node major -- so "works on my machine"
 # and "works in Actions" stop being separate questions.
 #
 #     docker run --rm -e CLOUDFLARE_API_TOKEN \
@@ -20,15 +20,15 @@
 #       deploy
 #
 # Hardening: multi-stage so no build toolchain reaches the final layer;
-# distroless base, so there is no shell, no package manager, and no busybox
-# for an attacker to pivot through; non-root uid/gid 10001 (matching
-# secure-container-template's convention); dependencies installed with
-# --ignore-scripts so no package lifecycle script executes at build time.
+# distroless final base, so there is no shell, no package manager, and no busybox
+# for an attacker to pivot through; non-root uid/gid 65532 (distroless nonroot);
+# dependencies installed with --ignore-scripts so no package lifecycle
+# script executes at build time.
 # ----------------------------------------------------------------------------
 
 # Pinned by digest, not just tag: a tag can be repointed at arbitrary content
 # after review, which is the same reasoning that pins the SHAs in ci.yml.
-FROM node:25-bookworm-slim AS build
+FROM node:24-bookworm-slim@sha256:8579e5fce559544b50072d05cc5d3b84b6a14d0989ae56c331d9e983a36a21f1 AS build
 
 WORKDIR /app
 
@@ -54,21 +54,19 @@ RUN npx tsc --noEmit \
 # ----------------------------------------------------------------------------
 # Final stage: no shell, no npm, no compilers.
 # ----------------------------------------------------------------------------
-FROM gcr.io/distroless/nodejs24-debian12:nonroot
+FROM gcr.io/distroless/nodejs24-debian12:nonroot@sha256:14d42e2511532589a7c7e01a753667a74fcc96266e137e8125006b87b0c32d0a
 
+# Make the runtime identity explicit before WORKDIR, so BuildKit creates
+# /app for this user. Wrangler needs to write .wrangler/tmp at runtime.
+USER 65532:65532
 WORKDIR /app
 
-# node_modules carries wrangler and its platform binaries; the rest is what
-# wrangler needs to resolve the Worker's config and entrypoint.
+# Copy only the declared inputs and bundle, excluding build-stage scratch.
 COPY --from=build --chown=nonroot:nonroot /app/node_modules ./node_modules
 COPY --from=build --chown=nonroot:nonroot /app/package.json /app/package-lock.json ./
 COPY --from=build --chown=nonroot:nonroot /app/wrangler.jsonc /app/tsconfig.json /app/worker-configuration.d.ts ./
 COPY --from=build --chown=nonroot:nonroot /app/src ./src
 COPY --from=build --chown=nonroot:nonroot /app/dist ./dist
-
-# distroless :nonroot is uid/gid 65532. Stated explicitly so a base-image
-# change can never silently promote this back to root.
-USER 65532:65532
 
 ENV NODE_ENV=production \
     WRANGLER_SEND_METRICS=false

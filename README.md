@@ -34,7 +34,7 @@ everything your account can see.
 | **Real OAuth 2.1** | PKCE, Dynamic Client Registration, and Client ID Metadata Documents, via Cloudflare's own `workers-oauth-provider` |
 | **Tokens that renew themselves** | 8-hour GitHub access tokens refreshed transparently against a 6-month refresh token; the MCP client never sees either |
 | **A hardened release** | multi-arch toolchain image, non-root and distroless, signed keyless with cosign, published with SBOM and SLSA provenance |
-| **Tested against the real runtime** | 72 tests on `workerd` via `@cloudflare/vitest-pool-workers`, not a Node polyfill, plus a post-deploy smoke test against the live gateway |
+| **Tested against the real runtime** | OAuth, token and tool tests on `workerd` via `@cloudflare/vitest-pool-workers`, not a Node polyfill, plus a post-deploy smoke test against the live gateway |
 
 [![github-mcp-gateway MCP server](https://glama.ai/mcp/servers/mazze93/github-mcp-gateway/badges/card.svg)](https://glama.ai/mcp/servers/mazze93/github-mcp-gateway)
 

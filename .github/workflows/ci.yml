@@ -73,6 +73,9 @@ jobs:
                   print(f"ok  {path}  jobs={list(doc['jobs'])}")
           sys.exit(1 if failed else 0)
           PY
+      - name: Verify toolchain runtime alignment and image pins
+        run: python3 scripts/check-toolchain.py
+
       # VERSION, package.json, and package-lock.json each carry the project's
       # version independently, and they drift silently. release.yml checks the
       # TAG against the first two -- nothing checked the lockfile, and nothing
@@ -99,7 +102,7 @@ jobs:
 
       # Runs against the real Workers runtime via @cloudflare/vitest-pool-workers
       # (workerd, not a Node polyfill) -- covers the OAuth allowlist gate, CSRF
-      # and signed-cookie handling, loopback redirect normalisation, token
+      # and signed-cookie handling, loopback redirect validation, token
       # refresh, and tool error wrapping. See test/*.test.ts.
       - name: Test
         run: npm test
@@ -168,6 +171,11 @@ jobs:
             echo "::error::Image wrangler ${VERSION} != lockfile wrangler ${EXPECTED}"
             exit 1
           fi
+
+      # Exercise the final Node runtime and its copied dependencies, not just
+      # the CLI version path. No credentials, network deployment, or publishing.
+      - name: Build Worker inside the final toolchain image
+        run: docker run --rm github-mcp-gateway-toolchain:ci deploy --dry-run --outdir /tmp/worker-dist
 
       # A non-root final stage is a hardening claim; assert it rather than
       # trusting the Dockerfile to stay that way.
