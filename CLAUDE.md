@@ -114,8 +114,11 @@ MCP client ──OAuth 2.1 (DCR, PKCE)──▶ Worker ──GitHub App OAuth─
   `test/entrypoint.test.ts` pins this.
 - `src/github-mcp-agent.ts` — Durable Object (`MCP_OBJECT`), one per session;
   registers all tool modules in `init()`.
-- `src/oauth/github-handler.ts` — consent screen, GitHub redirect, `/callback`
+- `src/oauth/github-handler.ts` — `GET /` landing page, consent screen, GitHub redirect, `/callback`
   (allowlist gate + token persistence).
+- `src/oauth/brand.ts` — shared page shell for the landing and consent pages
+  (Kintsugi palette, system font stacks, static CSP with no `form-action` — it
+  would apply to the 302 to github.com). Change styling here, once.
 - `src/oauth/workers-oauth-utils.ts` — CSRF, one-time KV state, session-binding
   cookie, HMAC-signed approved-clients cookie. All cookies `__Host-` prefixed.
 - Loopback redirect URIs are validated directly by workers-oauth-provider:

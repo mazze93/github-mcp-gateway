@@ -3,6 +3,7 @@ import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provid
 import { Hono } from "hono";
 import { Octokit } from "octokit";
 import { isLoginAllowed } from "./allowlist";
+import { landingBody, PAGE_SECURITY_HEADERS, renderBrandedPage } from "./brand";
 import { fetchUpstreamAuthToken, getUpstreamAuthorizeUrl } from "./utils";
 import {
 	addApprovedClient,
@@ -21,6 +22,21 @@ const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
+
+// The OAuthProvider hands every non-API, non-OAuth path to this handler, so
+// without a route here "/" is a bare 404. Static and unauthenticated by design:
+// it names the endpoints and nothing else.
+app.get("/", () =>
+	new Response(
+		renderBrandedPage({
+			title: "GitHub MCP Gateway",
+			eyebrow: "mazzeleczzare.com / workbench",
+			heading: "GitHub MCP Gateway",
+			body: landingBody(),
+		}),
+		{ headers: PAGE_SECURITY_HEADERS },
+	),
+);
 
 app.get("/authorize", async (c) => {
 	// parseAuthRequest throws on any invalid parameter (unknown client, bad

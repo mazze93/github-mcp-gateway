@@ -43,6 +43,11 @@ change to the container.
 
 ### Changed
 
+- **Landing and consent pages are branded as a mazzeleczzare.com project.**
+  `GET /` now serves a static landing page (it was a bare 404), and the consent
+  screen shares the same shell (`src/oauth/brand.ts`). Both are served with a
+  strict CSP (`default-src 'none'`, `frame-ancestors 'none'`), which also makes
+  the consent click un-frameable. No change to the OAuth flow or tool surface.
 - **OAuth tokens are now bound to the gateway's origin as their audience.**
   `@cloudflare/workers-oauth-provider` 1.x (merged in #69 without its
   migration, which left `main` failing typecheck and every deploy since
