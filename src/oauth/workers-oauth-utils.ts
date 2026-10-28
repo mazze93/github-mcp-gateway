@@ -1,4 +1,5 @@
 import type { AuthRequest, ClientInfo } from "@cloudflare/workers-oauth-provider";
+import { escapeHtml, PAGE_SECURITY_HEADERS, renderBrandedPage } from "./brand";
 
 const COOKIE_CSRF = "__Host-CSRF_TOKEN";
 const COOKIE_SESSION = "__Host-CONSENTED_STATE";
@@ -238,15 +239,6 @@ export async function addApprovedClient(
 // Consent screen
 // ---------------------------------------------------------------------------
 
-function escapeHtml(input: string): string {
-	return input
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
-}
-
 export interface ApprovalDialogOptions {
 	client: ClientInfo | null;
 	csrfToken: string;
@@ -260,42 +252,11 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
 	const clientName = client?.clientName ? escapeHtml(client.clientName) : "An MCP client";
 	const encodedState = btoa(JSON.stringify(state));
 
-	const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Authorize ${escapeHtml(server.name)}</title>
-<style>
-  :root { color-scheme: dark; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #0d1117; color: #e6edf3;
-    display: flex; align-items: center; justify-content: center;
-    min-height: 100vh; margin: 0; padding: 24px;
-  }
-  .card {
-    max-width: 420px; width: 100%; background: #161b22;
-    border: 1px solid #30363d; border-radius: 12px; padding: 32px;
-  }
-  h1 { font-size: 1.1rem; margin: 0 0 8px; }
-  p { color: #8b949e; font-size: 0.9rem; line-height: 1.5; }
-  .grant {
-    background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
-    padding: 12px 16px; margin: 20px 0; font-size: 0.85rem; color: #e6edf3;
-  }
-  button {
-    width: 100%; padding: 10px; border-radius: 8px; border: none;
-    font-size: 0.95rem; font-weight: 600; cursor: pointer; margin-top: 8px;
-  }
-  .approve { background: #5CCFCF; color: #0d1117; }
-  .deny { background: transparent; color: #8b949e; border: 1px solid #30363d; }
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>${escapeHtml(server.name)}</h1>
-    <p>${escapeHtml(server.description)}</p>
+	const html = renderBrandedPage({
+		title: `Authorize ${server.name}`,
+		eyebrow: "Authorize access",
+		heading: server.name,
+		body: `<p>${escapeHtml(server.description)}</p>
     <div class="grant">
       <strong>${clientName}</strong> is requesting access to your GitHub repositories
       through this server. You'll choose which repositories on the next screen
@@ -305,14 +266,12 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
       <input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}">
       <input type="hidden" name="state" value="${escapeHtml(encodedState)}">
       <button type="submit" class="approve">Continue to GitHub</button>
-    </form>
-  </div>
-</body>
-</html>`;
+    </form>`,
+	});
 
 	return new Response(html, {
 		headers: {
-			"Content-Type": "text/html; charset=utf-8",
+			...PAGE_SECURITY_HEADERS,
 			"Set-Cookie": setCookie,
 		},
 	});
