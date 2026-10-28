@@ -1,5 +1,6 @@
 import type { AuthRequest, ClientInfo } from "@cloudflare/workers-oauth-provider";
 import { escapeHtml, PAGE_SECURITY_HEADERS, renderBrandedPage } from "./brand";
+import { classifyRedirect, type RedirectTrust } from "./redirect-trust";
 
 const COOKIE_CSRF = "__Host-CSRF_TOKEN";
 const COOKIE_SESSION = "__Host-CONSENTED_STATE";
@@ -247,6 +248,20 @@ export interface ApprovalDialogOptions {
 	state: { oauthReqInfo: AuthRequest };
 }
 
+function destinationMarkup(trust: RedirectTrust): string {
+	const host = escapeHtml(trust.host);
+	const where =
+		trust.kind === "loopback"
+			? `an app on this computer (<code>${host}</code>)`
+			: `<code>${host}</code>`;
+	const dest = `<dl><dt>Authorization code will be sent to</dt><dd>${where}</dd></dl>`;
+	if (trust.kind === "loopback" || trust.kind === "known") return dest;
+	return `${dest}
+    <div class="warn"><strong>Unrecognised destination.</strong> Continue only if you just
+    started this connection yourself from <code>${host}</code>. Anyone can register a client
+    under any name; if you followed a link from someone else, close this page.</div>`;
+}
+
 export function renderApprovalDialog(request: Request, options: ApprovalDialogOptions): Response {
 	const { client, csrfToken, server, setCookie, state } = options;
 	const clientName = client?.clientName ? escapeHtml(client.clientName) : "An MCP client";
@@ -260,8 +275,9 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
     <div class="grant">
       <strong>${clientName}</strong> is requesting access to your GitHub repositories
       through this server. You'll choose which repositories on the next screen
-      (GitHub's installation picker).
+      (GitHub's installation picker). The client chose this name itself; it is not verified.
     </div>
+    ${destinationMarkup(classifyRedirect(state.oauthReqInfo.redirectUri))}
     <form method="POST" action="/authorize">
       <input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}">
       <input type="hidden" name="state" value="${escapeHtml(encodedState)}">

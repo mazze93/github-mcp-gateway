@@ -58,7 +58,7 @@ Three places, and they drift apart if only one is touched:
   directories read this file from the repo.
 - **`README.md`** — the header block: one-sentence description, CI/release/
   license badges, and the "What you get" table. The tool count there is a
-  claim about `src/tools/*.ts`; if you add a tool, update it (currently 21 —
+  claim about `src/tools/*.ts`; if you add a tool, update it (currently 24 —
   `grep -c 'server.tool(' src/tools/*.ts`).
 
 `isTemplate` is set on the repo, which matches the fork-and-deploy model.
@@ -119,6 +119,16 @@ MCP client ──OAuth 2.1 (DCR, PKCE)──▶ Worker ──GitHub App OAuth─
 - `src/oauth/brand.ts` — shared page shell for the landing and consent pages
   (Kintsugi palette, system font stacks, static CSP with no `form-action` — it
   would apply to the 302 to github.com). Change styling here, once.
+- `src/oauth/redirect-trust.ts` — classifies an authorize request's redirect
+  host (loopback / first-party / unverified) for the consent screen. Open
+  dynamic registration lets anyone register a client named "Claude Code" with an
+  attacker redirect, and the allowlist cannot stop that (the victim *is* the
+  allowed user), so the screen shows where the code goes and warns on unknown
+  hosts. It informs; it does not block. Hard-restricting redirect hosts is an
+  open decision, not a default.
+- `src/oauth/register-guard.ts` — caps `POST /register` (16 KiB body, 100-char
+  `client_name`) before the provider stores anything. Registration is
+  unauthenticated by spec; `workers.dev` has no zone, so no rate limiting.
 - `src/oauth/workers-oauth-utils.ts` — CSRF, one-time KV state, session-binding
   cookie, HMAC-signed approved-clients cookie. All cookies `__Host-` prefixed.
 - Loopback redirect URIs are validated directly by workers-oauth-provider:
@@ -142,7 +152,10 @@ MCP client ──OAuth 2.1 (DCR, PKCE)──▶ Worker ──GitHub App OAuth─
 
 ## Adding a tool
 
-Add it to the matching `src/tools/*.ts` module (or a new module registered in
+Classify it in `ANNOTATIONS` in `src/tools/helpers.ts` first (read-only,
+additive, or destructive) — `annotationsFor()` throws for an unlisted name and
+`test/tool-surface.test.ts` pins the destructive set, so a tool cannot ship
+without a safety class. Add it to the matching `src/tools/*.ts` module (or a new module registered in
 `github-mcp-agent.ts`). Pattern: `server.tool(name, description, zodShape,
 handler)` with the handler wrapped in `withOctokit(env, props, ...)`. Return
 plain serializable objects — `ok()` JSON-stringifies them. Then typecheck, test,
@@ -150,6 +163,11 @@ dry-run build, and merge to `main` (which deploys). Reconnect the MCP client
 afterwards — tool lists are only fetched at session start.
 
 ## Constraints
+
+- **`github_get_check_runs` needs two App permissions the App may not have yet:**
+  Checks (read) and Commit statuses (read). Without them it returns a clear
+  "missing permission" error, not a crash. Granting them is Mazze's call at
+  https://github.com/settings/installations.
 
 - **Destructive tools** — `github_merge_pull_request` and `github_delete_file`
   are irreversible; always confirm with the user before invoking them.

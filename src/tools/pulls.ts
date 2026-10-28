@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Props } from "../types";
-import { withOctokit } from "./helpers";
+import { annotationsFor, withOctokit } from "./helpers";
 
 export function registerPullRequestTools(server: McpServer, env: Env, props: Props): void {
 	server.tool(
@@ -14,6 +14,7 @@ export function registerPullRequestTools(server: McpServer, env: Env, props: Pro
 			per_page: z.number().int().min(1).max(100).optional(),
 			page: z.number().int().min(1).optional(),
 		},
+		annotationsFor("github_list_pull_requests"),
 		async ({ owner, repo, state, per_page, page }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.pulls.list({
@@ -45,6 +46,7 @@ export function registerPullRequestTools(server: McpServer, env: Env, props: Pro
 			repo: z.string(),
 			pull_number: z.number().int(),
 		},
+		annotationsFor("github_get_pull_request"),
 		async ({ owner, repo, pull_number }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.pulls.get({ owner, repo, pull_number });
@@ -74,6 +76,7 @@ export function registerPullRequestTools(server: McpServer, env: Env, props: Pro
 			repo: z.string(),
 			pull_number: z.number().int(),
 		},
+		annotationsFor("github_list_pull_request_files"),
 		async ({ owner, repo, pull_number }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.pulls.listFiles({ owner, repo, pull_number });
@@ -99,6 +102,7 @@ export function registerPullRequestTools(server: McpServer, env: Env, props: Pro
 			body: z.string().optional(),
 			draft: z.boolean().optional(),
 		},
+		annotationsFor("github_create_pull_request"),
 		async ({ owner, repo, title, head, base, body, draft }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.pulls.create({
@@ -124,6 +128,7 @@ export function registerPullRequestTools(server: McpServer, env: Env, props: Pro
 			merge_method: z.enum(["merge", "squash", "rebase"]).optional().describe("Defaults to 'merge'."),
 			commit_title: z.string().optional(),
 		},
+		annotationsFor("github_merge_pull_request"),
 		async ({ owner, repo, pull_number, merge_method, commit_title }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.pulls.merge({
