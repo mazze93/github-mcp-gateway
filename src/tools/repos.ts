@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Props } from "../types";
-import { withOctokit } from "./helpers";
+import { annotationsFor, withOctokit } from "./helpers";
 
 export function registerRepoTools(server: McpServer, env: Env, props: Props): void {
 	server.tool(
@@ -12,6 +12,7 @@ export function registerRepoTools(server: McpServer, env: Env, props: Props): vo
 			per_page: z.number().int().min(1).max(100).optional().describe("Results per page (default 30, max 100)."),
 			page: z.number().int().min(1).optional().describe("Page number (default 1)."),
 		},
+		annotationsFor("github_list_repos"),
 		async ({ per_page, page }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data: installations } = await octokit.rest.apps.listInstallationsForAuthenticatedUser();
@@ -42,6 +43,7 @@ export function registerRepoTools(server: McpServer, env: Env, props: Props): vo
 			owner: z.string().describe("Repository owner (user or org)."),
 			repo: z.string().describe("Repository name."),
 		},
+		annotationsFor("github_get_repo"),
 		async ({ owner, repo }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.repos.get({ owner, repo });
@@ -68,6 +70,7 @@ export function registerRepoTools(server: McpServer, env: Env, props: Props): vo
 			per_page: z.number().int().min(1).max(100).optional(),
 			page: z.number().int().min(1).optional(),
 		},
+		annotationsFor("github_list_branches"),
 		async ({ owner, repo, per_page, page }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.repos.listBranches({
@@ -91,6 +94,7 @@ export function registerRepoTools(server: McpServer, env: Env, props: Props): vo
 			per_page: z.number().int().min(1).max(100).optional(),
 			page: z.number().int().min(1).optional(),
 		},
+		annotationsFor("github_list_commits"),
 		async ({ owner, repo, branch, path, per_page, page }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.repos.listCommits({
@@ -119,6 +123,7 @@ export function registerRepoTools(server: McpServer, env: Env, props: Props): vo
 			repo: z.string(),
 			ref: z.string().describe("Commit SHA."),
 		},
+		annotationsFor("github_get_commit"),
 		async ({ owner, repo, ref }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.repos.getCommit({ owner, repo, ref });
@@ -153,6 +158,7 @@ export function registerRepoTools(server: McpServer, env: Env, props: Props): vo
 				.optional()
 				.describe("Replaces ALL existing topics. Lowercase, hyphens, max 50 chars each."),
 		},
+		annotationsFor("github_update_repo"),
 		async ({ owner, repo, description, homepage, topics }) =>
 			withOctokit(env, props, async (octokit) => {
 				const result: Record<string, unknown> = {};
@@ -166,6 +172,32 @@ export function registerRepoTools(server: McpServer, env: Env, props: Props): vo
 					result.topics = data.names;
 				}
 				return result;
+			}),
+	);
+
+	server.tool(
+		"github_create_branch",
+		"Create a branch from an existing branch (default: the repository's default branch). " +
+			"Fails if the branch already exists. Use before github_create_or_update_file / " +
+			"github_create_pull_request to work on a branch other than the default.",
+		{
+			owner: z.string(),
+			repo: z.string(),
+			branch: z.string().min(1).describe("Name of the new branch."),
+			from_branch: z.string().optional().describe("Branch to start from. Defaults to the repo's default branch."),
+		},
+		annotationsFor("github_create_branch"),
+		async ({ owner, repo, branch, from_branch }) =>
+			withOctokit(env, props, async (octokit) => {
+				const base = from_branch ?? (await octokit.rest.repos.get({ owner, repo })).data.default_branch;
+				const { data: baseRef } = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${base}` });
+				const { data } = await octokit.rest.git.createRef({
+					owner,
+					repo,
+					ref: `refs/heads/${branch}`,
+					sha: baseRef.object.sha,
+				});
+				return { branch, ref: data.ref, sha: data.object.sha, from: base };
 			}),
 	);
 }

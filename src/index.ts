@@ -1,6 +1,7 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { GitHubHandler } from "./oauth/github-handler";
 import { GitHubMcpAgent } from "./github-mcp-agent";
+import { guardRegistration } from "./oauth/register-guard";
 
 export { GitHubMcpAgent };
 
@@ -84,7 +85,9 @@ function providerFor(request: Request): OAuthProvider {
 // Let the provider validate registered redirect URIs without rewriting hosts.
 // Current versions support localhost, IPv4 loopback and IPv6 loopback directly.
 export default {
-	fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return providerFor(request).fetch(request, env, ctx);
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		const guarded = await guardRegistration(request);
+		if (guarded instanceof Response) return guarded;
+		return providerFor(guarded).fetch(guarded, env, ctx);
 	},
 };

@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
+import { registerCheckTools } from "./tools/checks";
 import { registerContentTools } from "./tools/contents";
 import { registerIssueTools } from "./tools/issues";
 import { registerPullRequestTools } from "./tools/pulls";
@@ -25,5 +26,6 @@ export class GitHubMcpAgent extends McpAgent<Env, Record<string, never>, Props> 
 		registerPullRequestTools(this.server, this.env, this.props);
 		registerContentTools(this.server, this.env, this.props);
 		registerSearchTools(this.server, this.env, this.props);
+		registerCheckTools(this.server, this.env, this.props);
 	}
 }

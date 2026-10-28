@@ -21,6 +21,16 @@ change to the container.
 
 ## [Unreleased]
 
+### Security
+
+- **Consent screen shows where the authorization code is sent**, and warns on
+  an unrecognised destination. Dynamic registration is open, so an attacker
+  could register a client named "Claude Code" with their own redirect URI and
+  send the owner a link; the screen previously showed only the claimed name.
+  The allowlist does not cover this because the victim is the allowed user.
+- **`POST /register` is size-capped** (16 KiB body, 100-character
+  `client_name`); a 4 KiB name was previously stored as-is.
+
 ### Fixed
 
 - Remove the obsolete localhost-to-IPv4 redirect rewrite. Clients registered
@@ -35,6 +45,15 @@ change to the container.
 
 ### Added
 
+- **Three tools** (21 -> 24): `github_create_branch` (a PR could not be opened
+  end to end without it), `github_list_issue_comments` (comments could be
+  written but not read), and `github_get_check_runs` (CI status behind a PR's
+  `unstable` / `blocked` state; needs the App's Checks and Commit statuses read
+  permissions, and says so when they are missing).
+- **MCP annotations on every tool** (`readOnlyHint` / `destructiveHint` /
+  `idempotentHint`), enforced by a test, so clients can prompt on
+  `github_merge_pull_request`, `github_delete_file`, `github_update_repo` and
+  `github_create_or_update_file` instead of relying on description prose.
 - `bash scripts/test-toolchain.sh` builds and checks the final image with
   Apple container when available, with a Docker fallback.
 - Real-provider OAuth flow tests for localhost/IPv4/IPv6, unregistered

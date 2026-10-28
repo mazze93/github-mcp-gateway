@@ -81,6 +81,11 @@ const STYLE = `
   dl { margin: 18px 0; font-size: 0.85rem; }
   dt { font: 500 0.7rem/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 12px; }
   dd { margin: 4px 0 0; font-family: var(--mono); color: var(--text); }
+  code { font-family: var(--mono); font-size: 0.85em; color: var(--text); word-break: break-all; }
+  .warn {
+    margin: 16px 0; padding: 12px 14px; font-size: 0.85rem; line-height: 1.55; color: var(--text);
+    background: var(--ink); border: 1px solid var(--coral); border-left-width: 3px; border-radius: 8px;
+  }
   button {
     width: 100%; margin-top: 6px; padding: 12px; border: 0; border-radius: 8px;
     font: 600 0.95rem var(--sans); cursor: pointer;

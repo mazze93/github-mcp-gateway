@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Props } from "../types";
-import { withOctokit } from "./helpers";
+import { annotationsFor, withOctokit } from "./helpers";
 
 export function registerSearchTools(server: McpServer, env: Env, props: Props): void {
 	server.tool(
@@ -12,6 +12,7 @@ export function registerSearchTools(server: McpServer, env: Env, props: Props): 
 			query: z.string().describe("GitHub code search query, e.g. 'useEffect repo:owner/name'."),
 			per_page: z.number().int().min(1).max(100).optional(),
 		},
+		annotationsFor("github_search_code"),
 		async ({ query, per_page }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.search.code({ q: query, per_page: per_page ?? 20 });
@@ -34,6 +35,7 @@ export function registerSearchTools(server: McpServer, env: Env, props: Props): 
 			query: z.string().describe("GitHub search query, e.g. 'is:open is:pr repo:owner/name'."),
 			per_page: z.number().int().min(1).max(100).optional(),
 		},
+		annotationsFor("github_search_issues"),
 		async ({ query, per_page }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.search.issuesAndPullRequests({

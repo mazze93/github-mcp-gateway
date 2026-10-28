@@ -30,7 +30,7 @@ everything your account can see.
 
 | | |
 |---|---|
-| **21 tools** | repos (6), issues (5), pull requests (5), file contents (3), code and issue search (2) — every list tool paginated |
+| **24 tools** | repos (7), issues (6), pull requests (5), file contents (3), code and issue search (2), CI checks (1) — every list tool paginated; every tool declares MCP read-only / destructive annotations |
 | **Real OAuth 2.1** | PKCE, Dynamic Client Registration, and Client ID Metadata Documents, via Cloudflare's own `workers-oauth-provider` |
 | **Tokens that renew themselves** | 8-hour GitHub access tokens refreshed transparently against a 6-month refresh token; the MCP client never sees either |
 | **A hardened release** | multi-arch toolchain image, non-root and distroless, signed keyless with cosign, published with SBOM and SLSA provenance |

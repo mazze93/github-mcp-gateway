@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Props } from "../types";
-import { withOctokit } from "./helpers";
+import { annotationsFor, withOctokit } from "./helpers";
 
 function toBase64(text: string): string {
 	return btoa(unescape(encodeURIComponent(text)));
@@ -21,6 +21,7 @@ export function registerContentTools(server: McpServer, env: Env, props: Props):
 			path: z.string().describe("File or directory path relative to repo root. Use '' for repo root."),
 			ref: z.string().optional().describe("Branch, tag, or SHA. Defaults to the repo's default branch."),
 		},
+		annotationsFor("github_get_file_contents"),
 		async ({ owner, repo, path, ref }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.repos.getContent({ owner, repo, path, ref });
@@ -61,6 +62,7 @@ export function registerContentTools(server: McpServer, env: Env, props: Props):
 			branch: z.string().optional().describe("Defaults to the repo's default branch."),
 			sha: z.string().optional().describe("Current file blob SHA, required by GitHub when overwriting an existing file."),
 		},
+		annotationsFor("github_create_or_update_file"),
 		async ({ owner, repo, path, content, message, branch, sha }) =>
 			withOctokit(env, props, async (octokit) => {
 				let existingSha = sha;
@@ -109,6 +111,7 @@ export function registerContentTools(server: McpServer, env: Env, props: Props):
 			sha: z.string().describe("Current file blob SHA — fetch via github_get_file_contents first."),
 			branch: z.string().optional(),
 		},
+		annotationsFor("github_delete_file"),
 		async ({ owner, repo, path, message, sha, branch }) =>
 			withOctokit(env, props, async (octokit) => {
 				const { data } = await octokit.rest.repos.deleteFile({
